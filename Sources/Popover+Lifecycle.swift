@@ -95,14 +95,15 @@ public extension Popover {
 //        let dismissalTransaction = transaction ?? Transaction(animation: attributes.dismissal.animation)
 
         /// Clean up the container view controller if no more popovers are visible.
-        context.onDisappear = { [weak context] in
+//        context.onDisappear = { [weak context] in
 //            if model.popovers.isEmpty {
+                // SwiftUI doesn't seem to call onDisappear so let's just dismiss immediately. No more animations after all.
                 presentingViewController.dismiss(animated: false)
 //            }
 
             /// If at least one popover has `blocksBackgroundTouches` set to true, stop VoiceOver from reading out background views
 //            context?.presentedPopoverViewController?.view.accessibilityViewIsModal = model.popovers.contains { $0.attributes.blocksBackgroundTouches }
-        }
+//        }
 
         /// Remove this popover from the view model, dismissing it.
 //        withTransaction(dismissalTransaction) {
