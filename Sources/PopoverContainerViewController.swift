@@ -38,7 +38,7 @@ public class PopoverContainerViewController: HostingParentController {
         /// Only update frames on a bounds change.
         if let previousBounds = previousBounds, previousBounds != view.bounds {
             /// Orientation or screen bounds changed, so update popover frames.
-            DispatchQueue.main.asyncAfter(deadline: .now()) { [weak self] in
+            Task { @MainActor [weak self] in
                 self?.popoverModel.updateFramesAfterBoundsChange()
             }
         }
@@ -90,11 +90,15 @@ public class PopoverContainerViewController: HostingParentController {
     }
     
     @objc private func keyboardWillShow(notification: Notification) {
-        popoverModel.updateFramesAfterBoundsChange()
+        Task { @MainActor [weak self] in
+            self?.popoverModel.updateFramesAfterBoundsChange()
+        }
     }
     
     @objc private func keyboardWillHide(notification: Notification) {
-        popoverModel.updateFramesAfterBoundsChange()
+        Task { @MainActor [weak self] in
+            self?.popoverModel.updateFramesAfterBoundsChange()
+        }
     }
 
     private class PopoverGestureContainer: UIView {
