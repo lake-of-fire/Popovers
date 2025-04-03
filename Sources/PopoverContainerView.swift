@@ -52,7 +52,7 @@ struct PopoverInnerContainerView: View {
             HStack(alignment: .top) {
                 popover.view
                 /// Force touch target refresh
-                    .id(popover.id.uuidString + popover.context.isOffsetInitialized.description)
+                    .id(popover.id.uuidString) // + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing)
                     .environment(\.popoverDragHandler, PopoverDragHandler(
                         onChanged: { value in handleDragChanged(value) },
                         onEnded: { value in handleDragEnded(value) }
