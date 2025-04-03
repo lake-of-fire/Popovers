@@ -54,6 +54,7 @@ open class HostingParentView: UIView {
     private func checkBehind(view: UIView, point: CGPoint, event: UIEvent?) -> UIView? {
         // if the hittest lands on a hosting view, and it has user interaction enabled, we check behind it.
         // otherwise just return the view directly (this is almost definitely a UIKit view).
+        // we bypass scroll events here to fix mouse scrolling.
         if let view = hostingViews.first(where: { $0 == view }), view.isUserInteractionEnabled, !(event?.type == .scroll) {
             // in order to check behind the _UIHostingView that captures all of the touches, we can tell it to stop accepting touches, then perform another hittest in the same location to see what's underneath it.
             view.isUserInteractionEnabled = false
