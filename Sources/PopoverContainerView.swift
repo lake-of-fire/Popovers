@@ -9,6 +9,28 @@
 #if os(iOS)
 import SwiftUI
 
+public struct PopoverDragHandler {
+    /// Called on drag change with the gesture's value.
+    public var onChanged: (DragGesture.Value) -> Void
+    /// Called on drag ended with the gesture's value.
+    public var onEnded: (DragGesture.Value) -> Void
+}
+
+/// An EnvironmentKey for the popover drag handler.
+public struct PopoverDragHandlerKey: EnvironmentKey {
+    public static let defaultValue = PopoverDragHandler(
+        onChanged: { _ in },
+        onEnded: { _ in }
+    )
+}
+
+public extension EnvironmentValues {
+    var popoverDragHandler: PopoverDragHandler {
+        get { self[PopoverDragHandlerKey.self] }
+        set { self[PopoverDragHandlerKey.self] = newValue }
+    }
+}
+
 struct PopoverInnerContainerView: View {
     var popover: Popover
     @ObservedObject var popoverContext: Popover.Context
@@ -31,6 +53,10 @@ struct PopoverInnerContainerView: View {
                 popover.view
                 /// Force touch target refresh
                     .id(popover.id.uuidString + popover.context.isOffsetInitialized.description)
+                    .environment(\.popoverDragHandler, PopoverDragHandler(
+                        onChanged: { value in handleDragChanged(value) },
+                        onEnded: { value in handleDragEnded(value) }
+                    ))
                 
                 /// Have VoiceOver read the popover view first, before the dismiss button.
                     .accessibility(sortPriority: 1)
@@ -49,11 +75,9 @@ struct PopoverInnerContainerView: View {
             }
             /// Hide the popover until its size has been calculated.
             .opacity((popover.context.size != nil && popover.context.isOffsetInitialized) ? 1 : 0)
-            
             /// Read the popover's size in the view.
-            .sizeReader(transaction: popover.context.transaction, presentationID: popover.context.presentationID) { size in
+            .sizeReader(presentationID: popover.context.presentationID) { size in
                 if
-                    let transaction = popover.context.transaction,
                     let existingSize = popover.context.size
                 {
                     /// If the size is different during an existing transaction, this means
@@ -68,15 +92,12 @@ struct PopoverInnerContainerView: View {
                     } else {
                         /// Otherwise, since the size is the same, the popover is *replacing* a previous popover - animate it.
                         /// This could also be true when the screen bounds changed.
-                        withTransaction(transaction) {
-                            popover.updateFrame(with: size)
-                            updatePopoverOffset(for: popover)
-                            DispatchQueue.main.asyncAfter(deadline: .now()) {
-                                popoverModel.reload()
-                            }
+                        popover.updateFrame(with: size)
+                        updatePopoverOffset(for: popover)
+                        DispatchQueue.main.asyncAfter(deadline: .now()) {
+                            popoverModel.reload()
                         }
                     }
-                    popover.context.transaction = nil
                 } else {
                     /// When `popover.context.size` is nil or there is no transaction, the popover was just presented.
                     popover.updateFrame(with: size)
@@ -91,7 +112,19 @@ struct PopoverInnerContainerView: View {
             
             /// Offset the popover by the gesture's translation, if this current popover is the selected one.
             .offset(popover.context.offset)
-            
+            /// Add the drag gesture.
+//            .simultaneousGesture(
+//                /// `minimumDistance: 2` is enough to allow scroll views to scroll, if one is contained in the popover.
+//                DragGesture(minimumDistance: Popovers.minimumDragDistance)
+//                    .onChanged { value in
+//                        
+//                    }
+//                    .onEnded { value in
+//                    },
+//                including: .all
+//                including: .subviews
+//                including: .none
+//            )
             .padding(edgeInsets(for: popover)) /// Apply edge padding so that the popover doesn't overflow off the screen.
         }
         
@@ -146,6 +179,56 @@ struct PopoverInnerContainerView: View {
     
     // MARK: - Dragging
     
+    func handleDragChanged(_ value: DragGesture.Value) {
+        func update() {
+            /// Apply the offset.
+            applyDraggingOffset(popover: popover, translation: value.translation)
+            
+            /// Update the visual frame to account for the dragging offset.
+            popover.context.frame = CGRect(
+                origin: popover.context.staticFrame.origin + CGPoint(
+                    x: selectedPopoverOffset.width,
+                    y: selectedPopoverOffset.height
+                ),
+                size: popover.context.size ?? .zero
+            )
+            updatePopoverOffset(for: popover)
+        }
+        
+        /// Select the popover for dragging.
+        if selectedPopover == nil {
+            /// Apply an animation to make up for the `minimumDistance`.
+            withAnimation(.spring()) {
+                selectedPopover = popover
+                update()
+            }
+        } else {
+            /// The user is already dragging, so update the frames immediately.
+            update()
+        }
+    }
+    
+    func handleDragEnded(_ value: DragGesture.Value) {
+        /// The expected dragging end point.
+        let finalOrigin = CGPoint(
+            x: popover.context.staticFrame.origin.x + value.predictedEndTranslation.width,
+            y: popover.context.staticFrame.origin.y + value.predictedEndTranslation.height
+        )
+        
+        /// Recalculate the popover's frame.
+        withAnimation(.spring()) {
+            selectedPopoverOffset = .zero
+            
+            /// Let the popover know that it finished dragging.
+            popover.positionChanged(to: finalOrigin)
+            popover.context.frame = popover.context.staticFrame
+            updatePopoverOffset(for: popover)
+        }
+        
+        /// Unselect the popover.
+        self.selectedPopover = nil
+    }
+    
     /// Apply the additional offset needed if a popover is dragged.
     func applyDraggingOffset(popover: Popover, translation: CGSize) {
         var selectedPopoverOffset = CGSize.zero
@@ -193,8 +276,8 @@ struct PopoverInnerContainerView: View {
     /// "Rubber-band" the popover's translation.
     func getRubberBanding(translation: CGSize) -> CGSize {
         var offset = CGSize.zero
-        offset.width = pow(abs(translation.width), 0.7) * (translation.width > 0 ? 1 : -1)
-        offset.height = pow(abs(translation.height), 0.7) * (translation.height > 0 ? 1 : -1)
+        offset.width = pow(abs(translation.width), 0.9) * (translation.width > 0 ? 1 : -1)
+        offset.height = pow(abs(translation.height), 0.9) * (translation.height > 0 ? 1 : -1)
         return offset
     }
     
@@ -222,9 +305,7 @@ struct PopoverContainerView: View {
     @ObservedObject var popoverModel: PopoverModel
 
     var body: some View {
-        /// Support multiple popovers without interfering with each other.
         ZStack {
-            /// Loop over the popovers.
             if let popover = popoverModel.popover {
                 PopoverInnerContainerView(
                     popover: popover,

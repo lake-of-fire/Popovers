@@ -47,13 +47,7 @@ public class PopoverModel: ObservableObject {
      This is called when the screen bounds changes - by setting a transaction for each popover,
      the `PopoverContainerView` knows that it needs to animate a change (processed in `sizeReader`).
      */
-    func refresh(with transaction: Transaction?) {
-        /// Set each popovers's transaction to the new transaction to keep the smooth animation.
-//        for popover in popovers {
-//            popover.context.transaction = transaction
-//        }
-        popover?.context.transaction = transaction
-
+    func refresh() {
         /// Update all popovers.
         reload()
     }
@@ -125,7 +119,7 @@ public class PopoverModel: ObservableObject {
 
         /// Some other popovers need to wait until the rotation has completed before updating.
         DispatchQueue.main.asyncAfter(deadline: .now() + Popovers.frameUpdateDelayAfterBoundsChange) {
-            self.refresh(with: Transaction(animation: .default))
+            self.refresh()
         }
     }
 

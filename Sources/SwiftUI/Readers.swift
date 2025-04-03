@@ -42,6 +42,7 @@ public struct PopoverReader<Content: View>: View {
  */
 public struct WindowReader<Content: View>: View {
     /// Your SwiftUI view.
+    @ViewBuilder
     public let view: (UIWindow?) -> Content
 
     /// The read window.
@@ -89,9 +90,11 @@ public struct WindowReader<Content: View>: View {
         override func didMoveToWindow() {
             super.didMoveToWindow()
 
-            DispatchQueue.main.async {
-                /// Set the window.
-                self.windowViewModel.window = self.window
+            if windowViewModel.window !== self.window {
+                DispatchQueue.main.async {
+                    /// Set the window.
+                    self.windowViewModel.window = self.window
+                }
             }
         }
     }

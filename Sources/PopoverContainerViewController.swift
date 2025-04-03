@@ -120,7 +120,7 @@ public class PopoverContainerViewController: HostingParentController {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             
-            if let window = window {
+            if let window {
                 windowAvailable(window)
             }
         }

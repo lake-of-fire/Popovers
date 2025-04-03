@@ -33,15 +33,13 @@ public extension Popover {
         
         /// The current frame of the popover.
         @Published public var frame = CGRect.zero
+        let ee = UUID().uuidString.prefix(6)
         
         /// The currently selected anchor, if the popover has a `.relative` position.
         @Published public var selectedAnchor: Popover.Attributes.Position.Anchor?
         
         /// If this is true, the popover is the replacement of another popover.
         @Published public var isReplacement = false
-
-        /// For animation syncing. If this is not nil, the popover is in the middle of a frame refresh.
-        public var transaction: Transaction?
         
         /// Notify when the context changed.
         public var changeSink: AnyCancellable?
@@ -95,7 +93,7 @@ public extension Popover {
         /// Create a context for the popover. You shouldn't need to use this - it's done automatically when you create a new popover.
         public init() {
             changeSink = objectWillChange.sink { [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
                 DispatchQueue.main.async {
                     self.attributes.onContextChange?(self)
                 }
