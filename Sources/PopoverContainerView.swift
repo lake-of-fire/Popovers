@@ -50,16 +50,23 @@ struct PopoverInnerContainerView: View {
             
             /// Show the popover's main content view.
             HStack(alignment: .top) {
-                popover.view
-                /// Force touch target refresh
-                    .id(popover.id.uuidString) // + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing)
-                    .environment(\.popoverDragHandler, PopoverDragHandler(
-                        onChanged: { value in handleDragChanged(value) },
-                        onEnded: { value in handleDragEnded(value) }
-                    ))
+                Group {
+                    if #available(iOS 18.3.1, *) {
+                        popover.view
+                            .id(popover.id.uuidString)
+                    } else {
+                        popover.view
+                        /// Force touch target refresh
+                            .id(popover.id.uuidString + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing) edit: needed for hit targets to be correct... maybe not iOS 18?
+                    }
+                }
+                .environment(\.popoverDragHandler, PopoverDragHandler(
+                    onChanged: { value in handleDragChanged(value) },
+                    onEnded: { value in handleDragEnded(value) }
+                ))
                 
                 /// Have VoiceOver read the popover view first, before the dismiss button.
-                    .accessibility(sortPriority: 1)
+                .accessibility(sortPriority: 1)
                 
                 /// If VoiceOver is on and a `dismissButtonLabel` was set, show it.
                 if
