@@ -144,25 +144,19 @@ extension UIApplication {
     }
     
     func topViewController(controller: UIViewController? = nil) -> UIViewController? {
-        
-        if controller == nil {
-            return topViewController(controller: rootViewController)
+        var current = controller ?? rootViewController
+        while true {
+            if let nav = current as? UINavigationController, let visible = nav.visibleViewController {
+                current = visible
+            } else if let tab = current as? UITabBarController, let selected = tab.selectedViewController {
+                current = selected
+            } else if let presented = current?.presentedViewController {
+                current = presented
+            } else {
+                break
+            }
         }
-        
-        if let navigationController = controller as? UINavigationController {
-            return topViewController(controller: navigationController.visibleViewController)
-        }
-        
-        if let tabController = controller as? UITabBarController,
-           let selectedViewController = tabController.selectedViewController {
-            return topViewController(controller: selectedViewController)
-        }
-        
-        if let presentedViewController = controller?.presentedViewController {
-            return topViewController(controller: presentedViewController)
-        }
-        
-        return controller
+        return current
     }
 }
 
