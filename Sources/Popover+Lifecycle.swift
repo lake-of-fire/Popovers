@@ -15,6 +15,7 @@ public extension Popover {
     /**
      Present a popover in a window. It may be easier to use the `UIViewController.present(_:)` convenience method instead.
      */
+    @MainActor
     internal func present(in window: UIWindow, forwardBaseTouchesTo: UIView?) {
         /// Locate the topmost presented `UIViewController` in this window. We'll be presenting on top of this one.
         let presentingViewController = UIApplication.shared.topViewController(controller: window.rootViewController)

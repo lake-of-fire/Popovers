@@ -28,6 +28,7 @@ public struct Popover: Identifiable {
     /**
      Convenience accessor for the popover's ID.
      */
+    @MainActor
     public var id: UUID {
         get {
             context.id
@@ -82,6 +83,7 @@ public struct Popover: Identifiable {
 
 extension Popover: Equatable {
     /// Conform to equatable.
+    @MainActor
     public static func == (lhs: Popover, rhs: Popover) -> Bool {
         return lhs.id == rhs.id
     }

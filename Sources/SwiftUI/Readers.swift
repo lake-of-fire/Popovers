@@ -100,6 +100,7 @@ public struct WindowReader<Content: View>: View {
     }
 }
 
+@MainActor
 class WindowViewModel: ObservableObject {
     @Published var window: UIWindow?
 }

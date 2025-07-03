@@ -21,30 +21,39 @@ public extension Popover {
         /// The popover's customizable properties.
         public var attributes = Attributes()
         
+        @MainActor
         @Published internal var presentationID = UUID()
+        @MainActor
         @Published internal var isOffsetInitialized = false
+        @MainActor
         @Published internal var offset: CGSize = .zero
 
         /// The popover's dynamic size, calculated from SwiftUI. If this is `nil`, the popover is not yet ready to be displayed.
+        @MainActor
         @Published public var size: CGSize?
         
         /// The frame of the popover, without drag gesture offset applied.
+        @MainActor
         @Published public var staticFrame = CGRect.zero
         
         /// The current frame of the popover.
+        @MainActor
         @Published public var frame = CGRect.zero
-        let ee = UUID().uuidString.prefix(6)
+//        let ee = UUID().uuidString.prefix(6)
         
         /// The currently selected anchor, if the popover has a `.relative` position.
+        @MainActor
         @Published public var selectedAnchor: Popover.Attributes.Position.Anchor?
         
         /// If this is true, the popover is the replacement of another popover.
+        @MainActor
         @Published public var isReplacement = false
         
         /// Notify when the context changed.
         public var changeSink: AnyCancellable?
         
         /// Indicates whether the popover can be dragged.
+        @MainActor
         public var isDraggingEnabled: Bool {
             get {
                 popoverModel?.popoversDraggable ?? false
@@ -92,7 +101,7 @@ public extension Popover {
         
         /// Create a context for the popover. You shouldn't need to use this - it's done automatically when you create a new popover.
         public init() {
-            changeSink = objectWillChange.sink { [weak self] in
+            changeSink = objectWillChange.sink { @MainActor [weak self] in
                 guard let self else { return }
                 DispatchQueue.main.async {
                     self.attributes.onContextChange?(self)

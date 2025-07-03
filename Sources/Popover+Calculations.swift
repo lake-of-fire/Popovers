@@ -11,6 +11,7 @@ import SwiftUI
 
 public extension Popover {
     /// Updates the popover's frame using its size.
+    @MainActor
     func updateFrame(with size: CGSize?) {
         let frame = calculateFrame(from: size)
         context.size = size
@@ -19,6 +20,7 @@ public extension Popover {
     }
 
     /// Calculate the popover's frame based on its size and position.
+    @MainActor
     func calculateFrame(from size: CGSize?) -> CGRect {
         guard let window = context.presentedPopoverViewController?.view.window else { return .zero }
 
@@ -75,6 +77,7 @@ public extension Popover {
     }
 
     /// Calculate if the popover should be dismissed via drag **or** animated to another position (if using `.relative` positioning with multiple anchors). Called when the user stops dragging the popover.
+    @MainActor
     func positionChanged(to point: CGPoint) {
         let windowBounds = context.windowBounds
 

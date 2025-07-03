@@ -261,7 +261,6 @@ struct PopoverInnerContainerView: View {
                 selectedPopoverOffset = applyRubberBanding(to: popover, translation: translation)
             }
         case let .relative(popoverAnchors):
-            
             /// There is only 1 anchor for the popovers, so it can't be dragged to a different position.
             if popoverAnchors.count <= 1 {
                 if popover.attributes.dismissal.mode.contains(.dragDown) {

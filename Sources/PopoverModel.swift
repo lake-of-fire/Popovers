@@ -21,12 +21,15 @@ public class PopoverModel: ObservableObject {
     
     /// The currently-presented popovers. The oldest are in front, the newest at the end.
 //    @Published var popovers = [Popover]()
+    @MainActor
     @Published var popover: Popover?
 
     /// Determines if the popovers can be dragged.
+    @MainActor
     @Published var popoversDraggable = true
 
     /// Store the frames of views (for excluding popover dismissal or source frames).
+    @MainActor
     @Published var frameTags: [AnyHashable: CGRect] = [:]
 
     /**
@@ -34,6 +37,7 @@ public class PopoverModel: ObservableObject {
 
      To opt out of this behavior, set `attributes.dismissal.excludedFrames` manually. To clear this array (usually when you present another view where the frames don't apply), use a `FrameTagReader` to call `FrameTagProxy.clearSavedFrames()`.
      */
+    @MainActor
     @Published var selectionFrameTags: [AnyHashable: CGRect] = [:]
 
     /// Force the container view to update.
@@ -53,6 +57,7 @@ public class PopoverModel: ObservableObject {
     }
 
     /// Adds a `Popover` to this model.
+    @MainActor
     func add(_ popover: Popover) {
         if self.popover == nil {
             self.popover = popover
@@ -101,6 +106,7 @@ public class PopoverModel: ObservableObject {
 
      This is called when the device rotates or has a bounds change.
      */
+    @MainActor
     func updateFramesAfterBoundsChange() {
         /**
          First, update all popovers anyway.
@@ -124,6 +130,7 @@ public class PopoverModel: ObservableObject {
     }
 
     /// Access this with `UIResponder.frameTagged(_:)` if inside a `WindowReader`, or `Popover.Context.frameTagged(_:)` if inside a `PopoverReader.`
+    @MainActor
     func frame(tagged tag: AnyHashable) -> CGRect {
         let frame = frameTags[tag]
         return frame ?? .zero
