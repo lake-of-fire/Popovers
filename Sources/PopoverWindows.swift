@@ -87,7 +87,7 @@ class WindowPopoverModels {
     }
 }
 
-extension UIResponder {
+public extension UIResponder {
     /**
      The `PopoverModel` in the current responder chain.
 

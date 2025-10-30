@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 /**
  The View Controller that hosts `PopoverContainerView`. This is automatically managed.
@@ -47,6 +48,21 @@ public class PopoverContainerViewController: HostingParentController {
         previousBounds = view.bounds
     }
     
+    private func popoverDebugLog(_ message: String, _ metadata: (String, Any?)...) {
+#if DEBUG
+        let formatted = metadata
+            .map { key, value -> String in
+                if let value {
+                    return "\(key)=\(value)"
+                } else {
+                    return "\(key)=nil"
+                }
+            }
+            .joined(separator: " ")
+        debugPrint("# POPOVER \(message) \(formatted)")
+#endif
+    }
+
     override public func viewDidLoad() {
         super.viewDidLoad()
         
@@ -69,6 +85,7 @@ public class PopoverContainerViewController: HostingParentController {
             view.addSubview(hostingController.view)
             hostingController.didMove(toParent: self)
         })
+        popoverGestureContainerView?.popoverController = self
         
         makeBackgroundsClear = false
         if let popoverGestureContainerView {
@@ -82,7 +99,9 @@ public class PopoverContainerViewController: HostingParentController {
         
         /// Use the presenting view controller's view as the next element in the gesture container's responder chain
         /// when a hit test indicates no popover was tapped.
-        popoverGestureContainerView?.presentingViewGestureTarget = presentingViewController?.view
+        let target = presentingViewController?.view ?? presentingViewController?.viewIfLoaded ?? view.superview
+        popoverGestureContainerView?.presentingViewGestureTarget = target
+        forwardBaseTouchesTo = target
     }
     
     override public func didMove(toParent parent: UIViewController?) {
@@ -103,10 +122,11 @@ public class PopoverContainerViewController: HostingParentController {
 
     private class PopoverGestureContainer: UIView {
         private let windowAvailable: (UIWindow) -> Void
-        
+
         /// The `UIView` to forward hit tests to when a check fails in this view.
         weak var presentingViewGestureTarget: UIView?
-        
+        weak var popoverController: PopoverContainerViewController?
+
         init(windowAvailable: @escaping (UIWindow) -> Void) {
             self.windowAvailable = windowAvailable
             super.init(frame: .zero)
@@ -132,89 +152,238 @@ public class PopoverContainerViewController: HostingParentController {
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
             /// Make sure the hit event was actually a touch and not a cursor hover or something else.
             guard event.map({ $0.type == .touches }) ?? true else { return nil }
-            
-            /// Only loop through the popovers that are in this window.
-//            let popovers = popoverModel.popovers
-            
-            /// The current popovers' frames
-//            let popoverFrames = popovers.map { $0.context.frame }
-            let popoverFrame = popoverModel.popover?.context.frame
+
+            let popover = popoverModel.popover
+            let pointString = NSCoder.string(for: point)
+            var windowPointForForwarding: CGPoint? = nil
 
             /// Dismiss a popover, knowing that its frame does not contain the touch.
             func dismissPopoverIfNecessary(popoverToDismiss: Popover) {
                 if
                     popoverToDismiss.attributes.dismissal.mode.contains(.tapOutside), /// The popover can be automatically dismissed when tapped outside.
-                    popoverToDismiss.attributes.dismissal.tapOutsideIncludesOtherPopovers || /// The popover can be dismissed even if the touch hit another popover, **or...**
-//                        !popoverFrames.contains(where: { $0.contains(point) }) /// ... no other popover frame contains the point (the touch landed outside)
-                        !(popoverFrame?.contains(point) ?? false) /// ... no other popover frame contains the point (the touch landed outside)
+                    popoverToDismiss.attributes.dismissal.tapOutsideIncludesOtherPopovers
                 {
                     popoverToDismiss.dismiss()
                 }
             }
-            
-            /// Loop through the popovers and see if the touch hit it.
-            /// `reversed` to start from the most recently presented popovers, working backwards.
-            if let popover = popoverModel.popover {
-            //            for popover in popovers.reversed() {
-                /// Check it the popover was hit.
+
+            if let popover = popover {
                 if popover.context.frame.contains(point) {
-                    /// Dismiss other popovers if they have `tapOutsideIncludesOtherPopovers` set to true.
-//                    for popoverToDismiss in popovers {
-//                        if
-//                            popoverToDismiss != popover,
-//                            !popoverToDismiss.context.frame.contains(point) /// The popover's frame doesn't contain the touch point.
-//                        {
-//                            dismissPopoverIfNecessary(popoverToDismiss: popoverToDismiss)
-//                        }
-//                    }
-                    
-                    /// Receive the touch and block it from going through.
+                    popoverController?.popoverDebugLog(
+                        "PopoverGestureContainer.hitInside",
+                        ("point", pointString),
+                        ("component", popover.attributes.tag ?? "nil")
+                    )
                     return super.hitTest(point, with: event)
                 }
-                
-                /// The popover was not hit, so let it know that the user tapped outside.
-                popover.attributes.onTapOutside?()
-                
-                /// If the popover has `blocksBackgroundTouches` set to true, stop underlying views from receiving the touch.
-                if popover.attributes.blocksBackgroundTouches {
-                    let allowedFrames = popover.attributes.blocksBackgroundTouchesAllowedFrames()
-                    
-                    if allowedFrames.contains(where: { $0.contains(point) }) {
-                        dismissPopoverIfNecessary(popoverToDismiss: popover)
-                        
-//                        return nil
-                        return presentingViewGestureTarget?.hitTest(point, with: event)
+
+                if let window {
+                    let converted = convert(point, to: window)
+                    windowPointForForwarding = converted
+                    if let controller = popoverController {
+                        Task { @MainActor [weak controller] in
+                            controller?.handleTapOutside(at: converted)
+                        }
                     } else {
-                        /// Receive the touch and block it from going through.
-                        return super.hitTest(point, with: event)
+                        popover.attributes.onTapOutside?()
+                    }
+                } else {
+                    windowPointForForwarding = point
+                    if let controller = popoverController {
+                        Task { @MainActor [weak controller] in
+                            controller?.handleTapOutside(at: point)
+                        }
+                    } else {
+                        popover.attributes.onTapOutside?()
                     }
                 }
-                
-                /// Check if the touch hit an excluded view. If so, don't dismiss it.
+
+                if popover.attributes.blocksBackgroundTouches {
+                    let allowedFrames = popover.attributes.blocksBackgroundTouchesAllowedFrames()
+                    if allowedFrames.contains(where: { $0.contains(point) }) {
+                        popoverController?.popoverDebugLog(
+                            "PopoverGestureContainer.allowedFrame",
+                            ("point", pointString),
+                            ("component", popover.attributes.tag ?? "nil")
+                        )
+                        dismissPopoverIfNecessary(popoverToDismiss: popover)
+                        return forwardTouchToPresentingView(point: point, windowPoint: windowPointForForwarding, event: event)
+                    }
+                    popoverController?.popoverDebugLog(
+                        "PopoverGestureContainer.blocksBackground",
+                        ("point", pointString),
+                        ("component", popover.attributes.tag ?? "nil")
+                        )
+                    return super.hitTest(point, with: event)
+                }
+
                 if popover.attributes.dismissal.mode.contains(.tapOutside) {
                     let excludedFrames = popover.attributes.dismissal.excludedFrames()
                     if excludedFrames.contains(where: { $0.contains(point) }) {
-                        /**
-                         The touch hit an excluded view, so don't dismiss it.
-                         However, if the touch hit another popover, block it from passing through.
-                         */
-//                        if popoverFrames.contains(where: { $0.contains(point) }) {
-                        if popoverFrame?.contains(point) ?? false {
-                            return super.hitTest(point, with: event)
-                        } else {
-                            return nil
-                        }
+                        popoverController?.popoverDebugLog(
+                            "PopoverGestureContainer.excludedFrame",
+                            ("point", pointString),
+                            ("component", popover.attributes.tag ?? "nil")
+                        )
+                        return super.hitTest(point, with: event)
                     }
                 }
-                
-                /// All checks did not pass, which means the touch landed outside the popover. So, dismiss it if necessary.
+
                 dismissPopoverIfNecessary(popoverToDismiss: popover)
             }
-            
-            /// The touch did not hit any popover, so pass it through to the hit testing target.
-//            return nil
-            return presentingViewGestureTarget?.hitTest(point, with: event)
+
+            if windowPointForForwarding == nil, let window {
+                windowPointForForwarding = convert(point, to: window)
+            }
+
+            return forwardTouchToPresentingView(point: point, windowPoint: windowPointForForwarding, event: event)
         }
+
+        private func forwardTouchToPresentingView(point: CGPoint, windowPoint: CGPoint?, event: UIEvent?) -> UIView? {
+            if let presenting = presentingViewGestureTarget {
+                if let windowPoint,
+                   let window {
+                    let presentingPoint = presenting.convert(windowPoint, from: window)
+                    if let hit = presenting.hitTest(presentingPoint, with: event) {
+                        popoverController?.popoverDebugLog(
+                            "forward.presenting.windowHit",
+                            ("view", String(describing: type(of: hit)))
+                        )
+                        return filtered(hit)
+                    }
+                }
+                let localPoint = presenting.convert(point, from: self)
+                if let hit = presenting.hitTest(localPoint, with: event) {
+                    popoverController?.popoverDebugLog(
+                        "forward.presenting.localHit",
+                        ("view", String(describing: type(of: hit)))
+                    )
+                    return filtered(hit)
+                }
+            }
+
+            if let window = window,
+               let rootView = window.rootViewController?.view {
+                let resolvedWindowPoint = windowPoint ?? convert(point, to: window)
+                let rootPoint = rootView.convert(resolvedWindowPoint, from: window)
+                if let hit = rootView.hitTest(rootPoint, with: event) {
+                    popoverController?.popoverDebugLog(
+                        "forward.window.rootHit",
+                        ("view", String(describing: type(of: hit)))
+                    )
+                    return filtered(hit)
+                }
+            }
+
+            if let forwardTarget = popoverController?.forwardBaseTouchesTo {
+                if let windowPoint,
+                   let window {
+                    let forwardPoint = forwardTarget.convert(windowPoint, from: window)
+                    if let hit = forwardTarget.hitTest(forwardPoint, with: event) {
+                        popoverController?.popoverDebugLog(
+                            "forward.base.windowHit",
+                            ("view", String(describing: type(of: hit)))
+                        )
+                        return filtered(hit)
+                    }
+                }
+                let localPoint = forwardTarget.convert(point, from: self)
+                if let hit = forwardTarget.hitTest(localPoint, with: event) {
+                    popoverController?.popoverDebugLog(
+                        "forward.base.localHit",
+                        ("view", String(describing: type(of: hit)))
+                    )
+                    return filtered(hit)
+                }
+            }
+
+            popoverController?.popoverDebugLog(
+                "forward.none",
+                ("point", windowPoint.map { NSCoder.string(for: CGRect(origin: $0, size: .zero)) } ?? "nil")
+            )
+            return nil
+        }
+
+        private func filtered(_ view: UIView) -> UIView? {
+            if view === self || view.isDescendant(of: self) {
+                return nil
+            }
+            return view
+        }
+    }
+
+    @MainActor
+    public func applyMeasuredContentSize(_ size: CGSize) {
+        guard size.width.isFinite,
+              size.height.isFinite else { return }
+        guard size.width > 40,
+              size.height > 40 else { return }
+        guard let popover = popoverModel.popover else { return }
+
+        popover.updateFrame(with: size)
+        updatePreferredContentSize(size: popover.context.size ?? size)
+    }
+
+    public func currentContentSize() -> CGSize {
+        if let popover = popoverModel.popover,
+           let contextSize = popover.context.size,
+           contextSize.width.isFinite,
+           contextSize.height.isFinite {
+            return contextSize
+        }
+        return preferredContentSize
+    }
+
+    public func updatePreferredContentSize(size: CGSize) {
+        guard size.width.isFinite,
+              size.height.isFinite else { return }
+        preferredContentSize = CGSize(width: max(size.width, 1), height: max(size.height, 1))
+    }
+
+    @MainActor
+    func handleTapOutside(at windowPoint: CGPoint) {
+        guard let popover = popoverModel.popover else { return }
+
+        popoverDebugLog(
+            "tapOutside.begin",
+            ("component", popover.context.attributes.tag ?? "nil"),
+            ("windowPoint", NSCoder.string(for: CGRect(origin: windowPoint, size: .zero)))
+        )
+
+        popover.attributes.onTapOutside?()
+
+        let excludedFrames = popover.attributes.dismissal.excludedFrames()
+        if let matchedFrame = excludedFrames.first(where: { $0.contains(windowPoint) }) {
+            popoverDebugLog(
+                "tapOutside.excluded",
+                ("component", popover.context.attributes.tag ?? "nil"),
+                ("frame", NSCoder.string(for: matchedFrame))
+            )
+            return
+        }
+
+        let tapOutsideEnabled = popover.attributes.dismissal.mode.contains(.tapOutside)
+        popoverDebugLog(
+            tapOutsideEnabled ? "tapOutside.tapOutsideEnabled" : "tapOutside.tapOutsideDisabled",
+            ("component", popover.context.attributes.tag ?? "nil")
+        )
+
+        if popover.attributes.blocksBackgroundTouches {
+            let allowedFrames = popover.attributes.blocksBackgroundTouchesAllowedFrames()
+            if allowedFrames.contains(where: { $0.contains(windowPoint) }) {
+                popoverDebugLog(
+                    "tapOutside.allowedFrame",
+                    ("component", popover.context.attributes.tag ?? "nil")
+                )
+                return
+            }
+        }
+
+        popoverDebugLog(
+            "tapOutside.dismiss",
+            ("component", popover.context.attributes.tag ?? "nil")
+        )
+        popover.dismiss()
     }
 }
 #endif

@@ -38,6 +38,7 @@ struct PopoverModifier: ViewModifier {
     @State var sourceFrame: CGRect?
 
     @State var contentView: UIView?
+    @State var contentSuperview: UIView?
     
     /// Create a popover. Use `.popover(present:attributes:view:)` to access.
     init<Content: View>(
@@ -71,6 +72,18 @@ struct PopoverModifier: ViewModifier {
                 .introspect(.view, on: .iOS(.v15...)) { view in
                     Task { @MainActor in
                         contentView = view
+                        if contentSuperview !== view.superview {
+                            contentSuperview = view.superview
+                        }
+                        if contentSuperview == nil {
+                            DispatchQueue.main.async { [weak view] in
+                                guard let view else { return }
+                                let pendingSuperview = view.superview
+                                if self.contentSuperview !== pendingSuperview {
+                                    self.contentSuperview = pendingSuperview
+                                }
+                            }
+                        }
                     }
                 }
                 /// Read the frame of the source view.
@@ -150,7 +163,8 @@ struct PopoverModifier: ViewModifier {
 //                        }
 
                         /// Present the popover.
-                        popover?.present(in: window, forwardBaseTouchesTo: contentView?.superview)
+                        let baseTouchTarget = contentView ?? contentSuperview
+                        popover?.present(in: window, forwardBaseTouchesTo: baseTouchTarget)
 
                     } else {
                         /// `$present` was set to `false`, dismiss the popover.
