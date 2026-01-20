@@ -77,6 +77,11 @@ public extension Popover {
      */
     func dismiss() {
         guard let presentingViewController = context.presentedPopoverViewController else { return }
+        let tagDescription = attributes.tag.map { String(describing: $0) } ?? "nil"
+        debugPrint(
+            "# BROKENPOPOVER popovers.dismiss",
+            "tag=\(tagDescription)"
+        )
         presentingViewController.dismiss(animated: false)
 
         /// Let the internal SwiftUI modifiers know that the popover was automatically dismissed.

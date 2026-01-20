@@ -163,6 +163,12 @@ public class PopoverContainerViewController: HostingParentController {
                     popoverToDismiss.attributes.dismissal.mode.contains(.tapOutside), /// The popover can be automatically dismissed when tapped outside.
                     popoverToDismiss.attributes.dismissal.tapOutsideIncludesOtherPopovers
                 {
+                    let tagDescription = popoverToDismiss.attributes.tag.map { String(describing: $0) } ?? "nil"
+                    debugPrint(
+                        "# BROKENPOPOVER popovers.hitTest.dismiss",
+                        "tag=\(tagDescription)",
+                        "reason=tapOutsideIncludesOtherPopovers"
+                    )
                     popoverToDismiss.dismiss()
                 }
             }
@@ -349,6 +355,12 @@ public class PopoverContainerViewController: HostingParentController {
             ("component", popover.context.attributes.tag ?? "nil"),
             ("windowPoint", NSCoder.string(for: CGRect(origin: windowPoint, size: .zero)))
         )
+        let tagDescription = popover.context.attributes.tag.map { String(describing: $0) } ?? "nil"
+        debugPrint(
+            "# BROKENPOPOVER popovers.tapOutside.begin",
+            "tag=\(tagDescription)",
+            "windowPoint=\(NSCoder.string(for: CGRect(origin: windowPoint, size: .zero)))"
+        )
 
         popover.attributes.onTapOutside?()
 
@@ -363,6 +375,11 @@ public class PopoverContainerViewController: HostingParentController {
         }
 
         let tapOutsideEnabled = popover.attributes.dismissal.mode.contains(.tapOutside)
+        debugPrint(
+            "# BROKENPOPOVER popovers.tapOutside.mode",
+            "tag=\(tagDescription)",
+            "tapOutsideEnabled=\(tapOutsideEnabled)"
+        )
         popoverDebugLog(
             tapOutsideEnabled ? "tapOutside.tapOutsideEnabled" : "tapOutside.tapOutsideDisabled",
             ("component", popover.context.attributes.tag ?? "nil")
@@ -383,7 +400,18 @@ public class PopoverContainerViewController: HostingParentController {
             "tapOutside.dismiss",
             ("component", popover.context.attributes.tag ?? "nil")
         )
-        popover.dismiss()
+        if tapOutsideEnabled {
+            debugPrint(
+                "# BROKENPOPOVER popovers.tapOutside.dismiss",
+                "tag=\(tagDescription)"
+            )
+            popover.dismiss()
+        } else {
+            debugPrint(
+                "# BROKENPOPOVER popovers.tapOutside.skipDismiss",
+                "tag=\(tagDescription)"
+            )
+        }
     }
 }
 #endif
