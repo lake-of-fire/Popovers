@@ -362,8 +362,6 @@ public class PopoverContainerViewController: HostingParentController {
             "windowPoint=\(NSCoder.string(for: CGRect(origin: windowPoint, size: .zero)))"
         )
 
-        popover.attributes.onTapOutside?()
-
         let excludedFrames = popover.attributes.dismissal.excludedFrames()
         if let matchedFrame = excludedFrames.first(where: { $0.contains(windowPoint) }) {
             popoverDebugLog(
@@ -373,6 +371,8 @@ public class PopoverContainerViewController: HostingParentController {
             )
             return
         }
+
+        popover.attributes.onTapOutside?()
 
         let tapOutsideEnabled = popover.attributes.dismissal.mode.contains(.tapOutside)
         debugPrint(
