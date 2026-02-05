@@ -17,6 +17,9 @@ public extension Popover {
         context.size = size
         context.staticFrame = frame
         context.frame = frame
+        context.offset = CGSize(width: frame.origin.x, height: frame.origin.y)
+        if let size, size != .zero {
+        }
     }
 
     /// Calculate the popover's frame based on its size and position.
@@ -58,6 +61,8 @@ public extension Popover {
                 popoverFrame.origin.y -= difference
             }
 
+            if let size, size != .zero {
+            }
             return popoverFrame
         case let .relative(popoverAnchors):
 
@@ -72,6 +77,8 @@ public extension Popover {
                 popoverSize: size ?? .zero
             )
 
+            if let size, size != .zero {
+            }
             return popoverFrame
         }
     }

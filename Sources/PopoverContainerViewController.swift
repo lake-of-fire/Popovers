@@ -8,6 +8,7 @@
 
 import SwiftUI
 import Foundation
+import WebKit
 
 /**
  The View Controller that hosts `PopoverContainerView`. This is automatically managed.
@@ -16,9 +17,14 @@ import Foundation
 public class PopoverContainerViewController: HostingParentController {
     /// The `UIView` used to handle gesture interactions for popovers.
     private var popoverGestureContainerView: PopoverGestureContainer?
+
+    weak var overlayWindow: UIWindow?
+    weak var baseWindow: UIWindow?
+    var isOverlayPresentation = false
     
     /// If this is nil, the view hasn't been laid out yet.
     var previousBounds: CGRect?
+    private var lastAppliedContentSize: CGSize = .zero
     
     /**
      Create a new `PopoverContainerViewController`. This is automatically managed.
@@ -99,9 +105,62 @@ public class PopoverContainerViewController: HostingParentController {
         
         /// Use the presenting view controller's view as the next element in the gesture container's responder chain
         /// when a hit test indicates no popover was tapped.
-        let target = presentingViewController?.view ?? presentingViewController?.viewIfLoaded ?? view.superview
+        let target = forwardBaseTouchesTo
+            ?? presentingViewController?.view
+            ?? presentingViewController?.viewIfLoaded
+            ?? view.superview
         popoverGestureContainerView?.presentingViewGestureTarget = target
         forwardBaseTouchesTo = target
+
+        if let overlayWindow = overlayWindow as? PopoverOverlayWindow {
+            overlayWindow.passThroughPointPredicate = { [weak self, weak overlayWindow] point in
+                self?.shouldPassThrough(pointInOverlayWindow: point, overlayWindow: overlayWindow) ?? false
+            }
+        }
+    }
+
+    private func shouldPassThrough(
+        pointInOverlayWindow point: CGPoint,
+        overlayWindow: PopoverOverlayWindow?
+    ) -> Bool {
+        guard let popover = popoverModel.popover else { return false }
+        guard popover.attributes.dismissal.mode.contains(.tapOutside) else { return false }
+
+        let windowPoint: CGPoint
+        let predicateWindow: UIWindow?
+        if let overlayWindow, let baseWindow {
+            let screenPoint = overlayWindow.convert(point, to: nil)
+            windowPoint = baseWindow.convert(screenPoint, from: nil)
+            predicateWindow = baseWindow
+        } else {
+            windowPoint = point
+            predicateWindow = overlayWindow ?? baseWindow
+        }
+
+        if popover.context.frame.contains(windowPoint) {
+            return false
+        }
+
+        let excludedFrames = popover.attributes.dismissal.excludedFrames()
+        guard excludedFrames.contains(where: { $0.contains(windowPoint) }) else { return false }
+        let shouldRespect = popover.attributes.dismissal.excludedFramesPointPredicate(windowPoint, predicateWindow)
+        if shouldRespect {
+            let tagDescription = popover.attributes.tag.map { String(describing: $0) } ?? "nil"
+            let pointDescription = NSCoder.string(for: CGRect(origin: windowPoint, size: .zero))
+        }
+        return shouldRespect
+    }
+
+    func teardownOverlayWindow() {
+        guard isOverlayPresentation else { return }
+        if let baseWindow {
+            baseWindow.makeKey()
+        }
+        overlayWindow?.isHidden = true
+        overlayWindow?.rootViewController = nil
+        overlayWindow = nil
+        baseWindow = nil
+        isOverlayPresentation = false
     }
     
     override public func didMove(toParent parent: UIViewController?) {
@@ -156,6 +215,14 @@ public class PopoverContainerViewController: HostingParentController {
             let popover = popoverModel.popover
             let pointString = NSCoder.string(for: point)
             var windowPointForForwarding: CGPoint? = nil
+            var baseWindowPointForForwarding: CGPoint? = nil
+
+            func resolveBaseWindowPoint(from localPoint: CGPoint) -> CGPoint? {
+                guard let overlayWindow = window,
+                      let baseWindow = popoverController?.baseWindow else { return nil }
+                let screenPoint = overlayWindow.convert(localPoint, to: nil)
+                return baseWindow.convert(screenPoint, from: nil)
+            }
 
             /// Dismiss a popover, knowing that its frame does not contain the touch.
             func dismissPopoverIfNecessary(popoverToDismiss: Popover) {
@@ -164,11 +231,6 @@ public class PopoverContainerViewController: HostingParentController {
                     popoverToDismiss.attributes.dismissal.tapOutsideIncludesOtherPopovers
                 {
                     let tagDescription = popoverToDismiss.attributes.tag.map { String(describing: $0) } ?? "nil"
-                    debugPrint(
-                        "# BROKENPOPOVER popovers.hitTest.dismiss",
-                        "tag=\(tagDescription)",
-                        "reason=tapOutsideIncludesOtherPopovers"
-                    )
                     popoverToDismiss.dismiss()
                 }
             }
@@ -186,22 +248,10 @@ public class PopoverContainerViewController: HostingParentController {
                 if let window {
                     let converted = convert(point, to: window)
                     windowPointForForwarding = converted
-                    if let controller = popoverController {
-                        Task { @MainActor [weak controller] in
-                            controller?.handleTapOutside(at: converted)
-                        }
-                    } else {
-                        popover.attributes.onTapOutside?()
-                    }
+                    baseWindowPointForForwarding = resolveBaseWindowPoint(from: point)
                 } else {
                     windowPointForForwarding = point
-                    if let controller = popoverController {
-                        Task { @MainActor [weak controller] in
-                            controller?.handleTapOutside(at: point)
-                        }
-                    } else {
-                        popover.attributes.onTapOutside?()
-                    }
+                    baseWindowPointForForwarding = resolveBaseWindowPoint(from: point)
                 }
 
                 if popover.attributes.blocksBackgroundTouches {
@@ -226,12 +276,27 @@ public class PopoverContainerViewController: HostingParentController {
                 if popover.attributes.dismissal.mode.contains(.tapOutside) {
                     let excludedFrames = popover.attributes.dismissal.excludedFrames()
                     if excludedFrames.contains(where: { $0.contains(point) }) {
-                        popoverController?.popoverDebugLog(
-                            "PopoverGestureContainer.excludedFrame",
-                            ("point", pointString),
-                            ("component", popover.attributes.tag ?? "nil")
-                        )
-                        return super.hitTest(point, with: event)
+                        let windowPoint = baseWindowPointForForwarding ?? windowPointForForwarding ?? convert(point, to: window)
+                        let predicateWindow = popoverController?.baseWindow ?? window
+                        let shouldRespectExcludedFrames = popover.attributes.dismissal.excludedFramesPointPredicate(windowPoint, predicateWindow)
+                        let tagDescription = popover.attributes.tag.map { String(describing: $0) } ?? "nil"
+                        let windowPointDescription = NSCoder.string(for: CGRect(origin: windowPoint, size: .zero))
+                        if shouldRespectExcludedFrames {
+                            popoverController?.popoverDebugLog(
+                                "PopoverGestureContainer.excludedFrame",
+                                ("point", pointString),
+                                ("component", popover.attributes.tag ?? "nil")
+                            )
+                            return nil
+                        }
+                    }
+                    if let controller = popoverController {
+                        let tapPoint = baseWindowPointForForwarding ?? windowPointForForwarding ?? point
+                        Task { @MainActor [weak controller] in
+                            controller?.handleTapOutside(at: tapPoint)
+                        }
+                    } else {
+                        popover.attributes.onTapOutside?()
                     }
                 }
 
@@ -240,17 +305,45 @@ public class PopoverContainerViewController: HostingParentController {
 
             if windowPointForForwarding == nil, let window {
                 windowPointForForwarding = convert(point, to: window)
+                baseWindowPointForForwarding = resolveBaseWindowPoint(from: point)
             }
 
-            return forwardTouchToPresentingView(point: point, windowPoint: windowPointForForwarding, event: event)
+            return forwardTouchToPresentingView(
+                point: point,
+                windowPoint: baseWindowPointForForwarding ?? windowPointForForwarding,
+                event: event
+            )
         }
 
         private func forwardTouchToPresentingView(point: CGPoint, windowPoint: CGPoint?, event: UIEvent?) -> UIView? {
+            let resolvedWindow = popoverController?.baseWindow ?? window
+            if let windowPoint, let resolvedWindow {
+                if let hit = resolvedWindow.hitTest(windowPoint, with: event) {
+                    if let filteredHit = filtered(hit) {
+                        debugForwardHit(
+                            hit: filteredHit,
+                            label: "window.hitTest",
+                            windowPoint: windowPoint,
+                            resolvedWindow: resolvedWindow
+                        )
+                        return filteredHit
+                    }
+                }
+            }
             if let presenting = presentingViewGestureTarget {
                 if let windowPoint,
-                   let window {
-                    let presentingPoint = presenting.convert(windowPoint, from: window)
-                    if let hit = presenting.hitTest(presentingPoint, with: event) {
+                   let resolvedWindow {
+                    if let hit = hitTestPreferred(
+                        in: presenting,
+                        windowPoint: windowPoint,
+                        resolvedWindow: resolvedWindow
+                    ) {
+                        debugForwardHit(
+                            hit: hit,
+                            label: "presenting.windowHit",
+                            windowPoint: windowPoint,
+                            resolvedWindow: resolvedWindow
+                        )
                         popoverController?.popoverDebugLog(
                             "forward.presenting.windowHit",
                             ("view", String(describing: type(of: hit)))
@@ -259,7 +352,16 @@ public class PopoverContainerViewController: HostingParentController {
                     }
                 }
                 let localPoint = presenting.convert(point, from: self)
-                if let hit = presenting.hitTest(localPoint, with: event) {
+                if let hit = hitTestPreferred(
+                    in: presenting,
+                    localPoint: localPoint
+                ) {
+                    debugForwardHit(
+                        hit: hit,
+                        label: "presenting.localHit",
+                        windowPoint: windowPoint,
+                        resolvedWindow: resolvedWindow
+                    )
                     popoverController?.popoverDebugLog(
                         "forward.presenting.localHit",
                         ("view", String(describing: type(of: hit)))
@@ -268,11 +370,20 @@ public class PopoverContainerViewController: HostingParentController {
                 }
             }
 
-            if let window = window,
-               let rootView = window.rootViewController?.view {
-                let resolvedWindowPoint = windowPoint ?? convert(point, to: window)
-                let rootPoint = rootView.convert(resolvedWindowPoint, from: window)
-                if let hit = rootView.hitTest(rootPoint, with: event) {
+            if let resolvedWindow,
+               let rootView = resolvedWindow.rootViewController?.view {
+                let resolvedWindowPoint = windowPoint ?? convert(point, to: resolvedWindow)
+                if let hit = hitTestPreferred(
+                    in: rootView,
+                    windowPoint: resolvedWindowPoint,
+                    resolvedWindow: resolvedWindow
+                ) {
+                    debugForwardHit(
+                        hit: hit,
+                        label: "root.windowHit",
+                        windowPoint: resolvedWindowPoint,
+                        resolvedWindow: resolvedWindow
+                    )
                     popoverController?.popoverDebugLog(
                         "forward.window.rootHit",
                         ("view", String(describing: type(of: hit)))
@@ -283,9 +394,18 @@ public class PopoverContainerViewController: HostingParentController {
 
             if let forwardTarget = popoverController?.forwardBaseTouchesTo {
                 if let windowPoint,
-                   let window {
-                    let forwardPoint = forwardTarget.convert(windowPoint, from: window)
-                    if let hit = forwardTarget.hitTest(forwardPoint, with: event) {
+                   let resolvedWindow {
+                    if let hit = hitTestPreferred(
+                        in: forwardTarget,
+                        windowPoint: windowPoint,
+                        resolvedWindow: resolvedWindow
+                    ) {
+                        debugForwardHit(
+                            hit: hit,
+                            label: "base.windowHit",
+                            windowPoint: windowPoint,
+                            resolvedWindow: resolvedWindow
+                        )
                         popoverController?.popoverDebugLog(
                             "forward.base.windowHit",
                             ("view", String(describing: type(of: hit)))
@@ -294,7 +414,16 @@ public class PopoverContainerViewController: HostingParentController {
                     }
                 }
                 let localPoint = forwardTarget.convert(point, from: self)
-                if let hit = forwardTarget.hitTest(localPoint, with: event) {
+                if let hit = hitTestPreferred(
+                    in: forwardTarget,
+                    localPoint: localPoint
+                ) {
+                    debugForwardHit(
+                        hit: hit,
+                        label: "base.localHit",
+                        windowPoint: windowPoint,
+                        resolvedWindow: resolvedWindow
+                    )
                     popoverController?.popoverDebugLog(
                         "forward.base.localHit",
                         ("view", String(describing: type(of: hit)))
@@ -307,7 +436,81 @@ public class PopoverContainerViewController: HostingParentController {
                 "forward.none",
                 ("point", windowPoint.map { NSCoder.string(for: CGRect(origin: $0, size: .zero)) } ?? "nil")
             )
+            let pointDescription = windowPoint.map { NSCoder.string(for: CGRect(origin: $0, size: .zero)) } ?? "nil"
             return nil
+        }
+
+        private func debugForwardHit(
+            hit: UIView,
+            label: String,
+            windowPoint: CGPoint?,
+            resolvedWindow: UIWindow?
+        ) {
+            let hitType = String(describing: type(of: hit))
+            let windowPointDescription = windowPoint.map { NSCoder.string(for: CGRect(origin: $0, size: .zero)) } ?? "nil"
+            var hierarchy: [String] = []
+            var cursor: UIView? = hit
+            var isWebView = false
+            while let view = cursor, hierarchy.count < 6 {
+                let viewType = String(describing: type(of: view))
+                hierarchy.append(viewType)
+                if view is WKWebView {
+                    isWebView = true
+                }
+                cursor = view.superview
+            }
+            let frameInWindow: String = {
+                guard let resolvedWindow else { return "nil" }
+                let frame = hit.convert(hit.bounds, to: resolvedWindow)
+                return NSCoder.string(for: frame)
+            }()
+        }
+
+        private func hitTestPreferred(
+            in view: UIView,
+            windowPoint: CGPoint,
+            resolvedWindow: UIWindow
+        ) -> UIView? {
+            let localPoint = view.convert(windowPoint, from: resolvedWindow)
+            return hitTestPreferred(
+                in: view,
+                localPoint: localPoint,
+                containerBounds: resolvedWindow.bounds
+            )
+        }
+
+        private func hitTestPreferred(
+            in view: UIView,
+            localPoint: CGPoint,
+            containerBounds: CGRect? = nil
+        ) -> UIView? {
+            guard view.bounds.contains(localPoint) else { return nil }
+            guard view.isUserInteractionEnabled, !view.isHidden, view.alpha > 0.01 else { return nil }
+            for subview in view.subviews.reversed() {
+                let subPoint = subview.convert(localPoint, from: view)
+                if let hit = hitTestPreferred(in: subview, localPoint: subPoint, containerBounds: containerBounds) {
+                    return hit
+                }
+            }
+            let className = String(describing: type(of: view))
+            let normalized = className.lowercased()
+            if normalized.contains("hosting")
+                || normalized.contains("swiftui")
+                || normalized.contains("platform")
+                || normalized.contains("wrapper")
+                || normalized.contains("transition")
+                || normalized.contains("passthrough") {
+                return nil
+            }
+            if normalized.contains("container"), let containerBounds {
+                let size = view.bounds.size
+                let matchesContainer = abs(size.width - containerBounds.width) < 2
+                    && abs(size.height - containerBounds.height) < 2
+                if matchesContainer, view.subviews.isEmpty == false {
+                    return nil
+                }
+            }
+            return view
         }
 
         private func filtered(_ view: UIView) -> UIView? {
@@ -325,9 +528,29 @@ public class PopoverContainerViewController: HostingParentController {
         guard size.width > 40,
               size.height > 40 else { return }
         guard let popover = popoverModel.popover else { return }
+        let deltaWidth = abs(size.width - lastAppliedContentSize.width)
+        let deltaHeight = abs(size.height - lastAppliedContentSize.height)
+        guard deltaWidth > 0.5 || deltaHeight > 0.5 else { return }
+
+#if DEBUG
+        let tagDescription = popover.context.attributes.tag.map { String(describing: $0) } ?? "nil"
+        debugPrint(
+            "# CRASH popover.applyMeasuredContentSize",
+            "tag=\(tagDescription)",
+            "size={w:\(size.width),h:\(size.height)}",
+            "delta={w:\(deltaWidth),h:\(deltaHeight)}",
+            "preferred={w:\(preferredContentSize.width),h:\(preferredContentSize.height)}"
+        )
+#endif
 
         popover.updateFrame(with: size)
         updatePreferredContentSize(size: popover.context.size ?? size)
+        lastAppliedContentSize = size
+    }
+
+    @MainActor
+    public func refreshPopoverFrames() {
+        popoverModel.updateFramesAfterBoundsChange()
     }
 
     public func currentContentSize() -> CGSize {
@@ -349,6 +572,9 @@ public class PopoverContainerViewController: HostingParentController {
     @MainActor
     func handleTapOutside(at windowPoint: CGPoint) {
         guard let popover = popoverModel.popover else { return }
+        let predicateWindow = baseWindow ?? view.window
+        let predicateWindowDescription = predicateWindow.map { NSCoder.string(for: $0.bounds) } ?? "nil"
+        let windowIdentity = predicateWindow.map { ObjectIdentifier($0).debugDescription } ?? "nil"
 
         popoverDebugLog(
             "tapOutside.begin",
@@ -356,30 +582,29 @@ public class PopoverContainerViewController: HostingParentController {
             ("windowPoint", NSCoder.string(for: CGRect(origin: windowPoint, size: .zero)))
         )
         let tagDescription = popover.context.attributes.tag.map { String(describing: $0) } ?? "nil"
-        debugPrint(
-            "# BROKENPOPOVER popovers.tapOutside.begin",
-            "tag=\(tagDescription)",
-            "windowPoint=\(NSCoder.string(for: CGRect(origin: windowPoint, size: .zero)))"
-        )
 
         let excludedFrames = popover.attributes.dismissal.excludedFrames()
         if let matchedFrame = excludedFrames.first(where: { $0.contains(windowPoint) }) {
-            popoverDebugLog(
-                "tapOutside.excluded",
-                ("component", popover.context.attributes.tag ?? "nil"),
-                ("frame", NSCoder.string(for: matchedFrame))
-            )
-            return
+            let shouldRespectExcludedFrames = popover.attributes.dismissal.excludedFramesPointPredicate(windowPoint, predicateWindow)
+            if !shouldRespectExcludedFrames {
+                popoverDebugLog(
+                    "tapOutside.excluded.ignored",
+                    ("component", popover.context.attributes.tag ?? "nil"),
+                    ("frame", NSCoder.string(for: matchedFrame))
+                )
+            } else {
+                popoverDebugLog(
+                    "tapOutside.excluded",
+                    ("component", popover.context.attributes.tag ?? "nil"),
+                    ("frame", NSCoder.string(for: matchedFrame))
+                )
+                return
+            }
         }
 
         popover.attributes.onTapOutside?()
 
         let tapOutsideEnabled = popover.attributes.dismissal.mode.contains(.tapOutside)
-        debugPrint(
-            "# BROKENPOPOVER popovers.tapOutside.mode",
-            "tag=\(tagDescription)",
-            "tapOutsideEnabled=\(tapOutsideEnabled)"
-        )
         popoverDebugLog(
             tapOutsideEnabled ? "tapOutside.tapOutsideEnabled" : "tapOutside.tapOutsideDisabled",
             ("component", popover.context.attributes.tag ?? "nil")
@@ -401,16 +626,8 @@ public class PopoverContainerViewController: HostingParentController {
             ("component", popover.context.attributes.tag ?? "nil")
         )
         if tapOutsideEnabled {
-            debugPrint(
-                "# BROKENPOPOVER popovers.tapOutside.dismiss",
-                "tag=\(tagDescription)"
-            )
             popover.dismiss()
         } else {
-            debugPrint(
-                "# BROKENPOPOVER popovers.tapOutside.skipDismiss",
-                "tag=\(tagDescription)"
-            )
         }
     }
 }

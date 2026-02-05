@@ -96,12 +96,6 @@ struct PopoverModifier: ViewModifier {
                     guard oldValue != newValue else { return }
                     popover?.context.isOffsetInitialized = false
                     let tagDescription = popover?.attributes.tag.map { String(describing: $0) } ?? "nil"
-                    debugPrint(
-                        "# BROKENPOPOVER popovers.present.changed",
-                        "old=\(oldValue)",
-                        "new=\(newValue)",
-                        "tag=\(tagDescription)"
-                    )
 
                     /// Make sure there is a window first.
                     var window: UIWindow! = readWindow
@@ -150,11 +144,6 @@ struct PopoverModifier: ViewModifier {
                              */
                             popover?.context.onAutoDismiss = {
                                 let dismissTagDescription = popover?.attributes.tag.map { String(describing: $0) } ?? "nil"
-                                debugPrint(
-                                    "# BROKENPOPOVER popovers.onAutoDismiss",
-                                    "tag=\(dismissTagDescription)",
-                                    "present=\(self.present)"
-                                )
                                 self.present = false
                                 //                            self.popover = nil /// Remove the reference to the popover.
                             }
@@ -183,10 +172,6 @@ struct PopoverModifier: ViewModifier {
                         /// `$present` was set to `false`, dismiss the popover.
 
                         /// If there is still a popover, it means the client set `$present` to false.
-                        debugPrint(
-                            "# BROKENPOPOVER popovers.dismiss.request",
-                            "tag=\(tagDescription)"
-                        )
                         popover?.dismiss()
                     }
                 }

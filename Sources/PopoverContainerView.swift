@@ -41,6 +41,8 @@ struct PopoverInnerContainerView: View {
     
     /// How much to offset the currently-dragging popover.
     @State var selectedPopoverOffset: CGSize = .zero
+    @State private var lastReportedSize: CGSize?
+    @State private var lastReportedContextSize: CGSize?
     
     var body: some View {
         /// All frames are calculated from the origin at the top-left, so use `.topLeading`.
@@ -60,6 +62,24 @@ struct PopoverInnerContainerView: View {
                             .id(popover.id.uuidString + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing) edit: needed for hit targets to be correct... maybe not iOS 18?
                     }
                 }
+                .frame(
+                    width: popover.context.size?.width,
+                    height: popover.context.size?.height,
+                    alignment: .topLeading
+                )
+                .clipped()
+                .contentShape(Rectangle())
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear {
+                                reportContentSize(proxy.size)
+                            }
+                            .onChange(of: proxy.size) { _ in
+                                reportContentSize(proxy.size)
+                            }
+                    }
+                )
                 .environment(\.popoverDragHandler, PopoverDragHandler(
                     onChanged: { value in handleDragChanged(value) },
                     onEnded: { value in handleDragEnded(value) }
@@ -84,6 +104,9 @@ struct PopoverInnerContainerView: View {
             .opacity((popover.context.size != nil && popover.context.isOffsetInitialized) ? 1 : 0)
             /// Read the popover's size in the view.
             .sizeReader(presentationID: popover.context.presentationID) { size in
+                if size == .zero {
+                    return
+                }
                 if
                     let existingSize = popover.context.size
                 {
@@ -149,6 +172,23 @@ struct PopoverInnerContainerView: View {
         /// Clean up the container view.
         .onDisappear {
             popover.context.onDisappear?()
+        }
+    }
+
+    private func reportContentSize(_ size: CGSize) {
+        guard size.width.isFinite, size.height.isFinite else { return }
+        guard size != .zero else { return }
+        let contextSize = popover.context.size
+        let shouldLog = lastReportedSize != size || lastReportedContextSize != contextSize
+        guard shouldLog else { return }
+        lastReportedSize = size
+        lastReportedContextSize = contextSize
+        let contextSizeDescription = contextSize.map { "{w: \(Int($0.width)), h: \(Int($0.height))}" } ?? "nil"
+        let sizeDescription = "{w: \(Int(size.width)), h: \(Int(size.height))}"
+        let frameDescription = NSCoder.string(for: popover.context.frame)
+        let offsetDescription = "{w: \(Int(popover.context.offset.width)), h: \(Int(popover.context.offset.height))}"
+        let mismatch = contextSize.map { abs($0.width - size.width) > 1 || abs($0.height - size.height) > 1 } ?? true
+        if mismatch {
         }
     }
     

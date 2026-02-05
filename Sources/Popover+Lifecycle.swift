@@ -17,22 +17,22 @@ public extension Popover {
      */
     @MainActor
     internal func present(in window: UIWindow, forwardBaseTouchesTo: UIView?) {
-        /// Locate the topmost presented `UIViewController` in this window. We'll be presenting on top of this one.
-        let presentingViewController = UIApplication.shared.topViewController(controller: window.rootViewController)
-        
-        /// There may already be a view controller presenting another popover - if so, let's use that.
-        let popoverViewController: PopoverContainerViewController
-        
-        /// Get the popover model that's tied to the window.
+        /// Use an overlay window to avoid reparenting issues in SwiftUI hosting hierarchies.
+        let overlayWindow = PopoverOverlayWindows.shared.overlayWindow(for: window)
         let model = window.popoverModel
+        let popoverViewController: PopoverContainerViewController
 
-        if let existingPopoverViewController = presentingViewController as? PopoverContainerViewController {
+        if let existingPopoverViewController = overlayWindow.rootViewController as? PopoverContainerViewController {
             popoverViewController = existingPopoverViewController
         } else {
             popoverViewController = PopoverContainerViewController()
+            overlayWindow.rootViewController = popoverViewController
         }
-        
-        popoverViewController.forwardBaseTouchesTo = forwardBaseTouchesTo
+
+        popoverViewController.forwardBaseTouchesTo = forwardBaseTouchesTo ?? window.rootViewController?.view
+        popoverViewController.overlayWindow = overlayWindow
+        popoverViewController.baseWindow = window
+        popoverViewController.isOverlayPresentation = true
         
         /// Hang on to the container for future dismiss/replace actions.
         context.presentedPopoverViewController = popoverViewController
@@ -56,16 +56,9 @@ public extension Popover {
 
         context.presentationID = UUID()
         
-        if presentingViewController === popoverViewController {
-            displayPopover()
-        } else {
-            /**
-             If we've prepared a new controller to present, then do so.
-             This isn't animated as we perform the popover animation inside the container view instead -
-             the view controller hosts the container that animates.
-             */
-            presentingViewController?.present(popoverViewController, animated: false, completion: displayPopover)
-        }
+        overlayWindow.isHidden = false
+        overlayWindow.makeKeyAndVisible()
+        displayPopover()
 
         if attributes.source == .stayAboveWindows {
             fatalError("stayAboveWindows removed until needed")
@@ -78,11 +71,11 @@ public extension Popover {
     func dismiss() {
         guard let presentingViewController = context.presentedPopoverViewController else { return }
         let tagDescription = attributes.tag.map { String(describing: $0) } ?? "nil"
-        debugPrint(
-            "# BROKENPOPOVER popovers.dismiss",
-            "tag=\(tagDescription)"
-        )
-        presentingViewController.dismiss(animated: false)
+        if presentingViewController.isOverlayPresentation {
+            presentingViewController.teardownOverlayWindow()
+        } else {
+            presentingViewController.dismiss(animated: false)
+        }
 
         /// Let the internal SwiftUI modifiers know that the popover was automatically dismissed.
         context.onAutoDismiss?()

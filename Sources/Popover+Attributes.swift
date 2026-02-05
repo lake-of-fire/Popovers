@@ -206,6 +206,9 @@ extension Popover {
             /// Don't dismiss the popover when the user taps on these frames. Only applies when `mode` is `.tapOutside`.
             public var excludedFrames: (() -> [CGRect]) = { [] }
             
+            /// Determine whether excluded frames should prevent dismissal for a given window point.
+            public var excludedFramesPointPredicate: ((CGPoint, UIWindow?) -> Bool) = { _, _ in true }
+            
             /// Move the popover off the screen if a `.dragDown` or `.dragUp` happens.
             public var dragMovesPopoverOffScreen = true
             
@@ -231,6 +234,7 @@ extension Popover {
                 mode: Popover.Attributes.Dismissal.Mode = Mode.tapOutside,
                 tapOutsideIncludesOtherPopovers: Bool = false,
                 excludedFrames: @escaping (() -> [CGRect]) = { [] },
+                excludedFramesPointPredicate: @escaping ((CGPoint, UIWindow?) -> Bool) = { _, _ in true },
                 dragMovesPopoverOffScreen: Bool = true,
                 dragDismissalProximity: CGFloat = CGFloat(0.25)
             ) {
@@ -239,6 +243,7 @@ extension Popover {
                 self.mode = mode
                 self.tapOutsideIncludesOtherPopovers = tapOutsideIncludesOtherPopovers
                 self.excludedFrames = excludedFrames
+                self.excludedFramesPointPredicate = excludedFramesPointPredicate
                 self.dragMovesPopoverOffScreen = dragMovesPopoverOffScreen
                 self.dragDismissalProximity = dragDismissalProximity
             }
