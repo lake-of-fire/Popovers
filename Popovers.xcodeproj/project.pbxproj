@@ -21,8 +21,8 @@
 		710EE36D5E52FEF9226AFECF /* Popover+Calculations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 955B8CCE5B5B2E30FE8D659D /* Popover+Calculations.swift */; };
 		71602A069C145E73CC21A914 /* PopoverWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D278E4B9A994AB6AC8ABB2 /* PopoverWindows.swift */; };
 		75A8172E43F226BA78740626 /* PopoverModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB58BB235FDE33C07D7B2B9 /* PopoverModel.swift */; };
+		83F5478BCCFE93D1413CC499 /* SwiftUIIntrospect.xcframework in Static XCFramework Dependencies */ = {isa = PBXBuildFile; fileRef = 0CFB0446A2B96C15F4D61BBE /* SwiftUIIntrospect.xcframework */; };
 		84AE6C437010165D82EB7DC7 /* Popovers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A75BC0851C07B87CB8E9812D /* Popovers.swift */; };
-		89BBAA0092AB8386031CBB2D /* SwiftUIIntrospect.framework in Dependencies */ = {isa = PBXBuildFile; fileRef = 2FF18CF03F9EC35DF397097F /* SwiftUIIntrospect.framework */; };
 		8B720134CCFBD2E4DE26E3C7 /* Templates.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68D8CBACF4EA1DECB81AC9F /* Templates.swift */; };
 		8DE11F1EB63AFC5BCDA9A5CE /* PopoverUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F688BB8BE862C65DF37F7B3C /* PopoverUtilities.swift */; };
 		9DB20A434E19E41C1D372D15 /* FrameTag.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3152B8FB6DE40EFB7E2070A /* FrameTag.swift */; };
@@ -34,14 +34,15 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		065184A7748DD4A8F51AE3C1 /* Dependencies */ = {
+		180616631CB839C1D8E9B3BD /* Static XCFramework Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 8;
+			dstPath = _StaticXCFrameworkDependencies/Popovers;
 			dstSubfolderSpec = 16;
 			files = (
-				89BBAA0092AB8386031CBB2D /* SwiftUIIntrospect.framework in Dependencies */,
+				83F5478BCCFE93D1413CC499 /* SwiftUIIntrospect.xcframework in Static XCFramework Dependencies */,
 			);
-			name = Dependencies;
+			name = "Static XCFramework Dependencies";
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		C0DE7BD08C9D10A7C6FF1416 /* Embed Frameworks */ = {
@@ -57,9 +58,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0CFB0446A2B96C15F4D61BBE /* SwiftUIIntrospect.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SwiftUIIntrospect.xcframework; path = /Users/alex/.cache/tuist/Binaries/d083c9ab1df7f327ed99603e3a5e0b98/SwiftUIIntrospect.xcframework; sourceTree = "<absolute>"; };
 		194A3E8A854AC47E57FACAAF /* Popover+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Popover+Lifecycle.swift"; sourceTree = "<group>"; };
 		1DA625403E86255B337EF9C7 /* Shadow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shadow.swift; sourceTree = "<group>"; };
-		2FF18CF03F9EC35DF397097F /* SwiftUIIntrospect.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SwiftUIIntrospect.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		30B16B69047F527A74BF9A0F /* Readers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Readers.swift; sourceTree = "<group>"; };
 		37D3A911CFF344D0972A2202 /* PopoverContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverContainerView.swift; sourceTree = "<group>"; };
 		3ABAA42D56638F37D8BF184C /* Popovers-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Popovers-Info.plist"; sourceTree = "<group>"; };
@@ -96,11 +97,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0B123185603E00626D01A953 /* Cache */ = {
+			isa = PBXGroup;
+			children = (
+				0CFB0446A2B96C15F4D61BBE /* SwiftUIIntrospect.xcframework */,
+			);
+			name = Cache;
+			sourceTree = "<group>";
+		};
 		24E67D3F4543F45A6C0E62C2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				E26AA47823ABE261BEAC6B5F /* Popovers.framework */,
-				2FF18CF03F9EC35DF397097F /* SwiftUIIntrospect.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -173,6 +181,7 @@
 			children = (
 				24E67D3F4543F45A6C0E62C2 /* Products */,
 				DAE1C82553B3A0A6C2526D80 /* Project */,
+				0B123185603E00626D01A953 /* Cache */,
 			);
 			sourceTree = "<group>";
 		};
@@ -195,7 +204,7 @@
 				E2BA42CBA4FEAC17913DE92C /* Resources */,
 				F8BEEEC66A7C16323329A8C5 /* Frameworks */,
 				C0DE7BD08C9D10A7C6FF1416 /* Embed Frameworks */,
-				065184A7748DD4A8F51AE3C1 /* Dependencies */,
+				180616631CB839C1D8E9B3BD /* Static XCFramework Dependencies */,
 			);
 			buildRules = (
 			);

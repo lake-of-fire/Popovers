@@ -57,7 +57,7 @@ extension Popover {
         
         /// Prevent views underneath the popover from being pressed.
         public var blocksBackgroundTouches = false
-        
+
         /// Frames that won't be blocked when `blocksBackgroundTouches` is turned on.
         public var blocksBackgroundTouchesAllowedFrames: () -> [CGRect] = { [] }
         

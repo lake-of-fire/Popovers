@@ -209,6 +209,9 @@ public class PopoverContainerViewController: HostingParentController {
          The popover container view takes up the entire screen, so normally it would block all touches from going through. This method fixes that.
          */
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return nil }
+            guard self.point(inside: point, with: event) else { return nil }
+
             /// Make sure the hit event was actually a touch and not a cursor hover or something else.
             guard event.map({ $0.type == .touches }) ?? true else { return nil }
 
@@ -273,7 +276,9 @@ public class PopoverContainerViewController: HostingParentController {
                     return super.hitTest(point, with: event)
                 }
 
-                if popover.attributes.dismissal.mode.contains(.tapOutside) {
+                let shouldHandleTapOutside = popover.attributes.dismissal.mode.contains(.tapOutside)
+                    || popover.attributes.onTapOutside != nil
+                if shouldHandleTapOutside {
                     let excludedFrames = popover.attributes.dismissal.excludedFrames()
                     if excludedFrames.contains(where: { $0.contains(point) }) {
                         let windowPoint = baseWindowPointForForwarding ?? windowPointForForwarding ?? convert(point, to: window)
@@ -287,7 +292,16 @@ public class PopoverContainerViewController: HostingParentController {
                                 ("point", pointString),
                                 ("component", popover.attributes.tag ?? "nil")
                             )
-                            return nil
+                            popoverController?.popoverDebugLog(
+                                "PopoverGestureContainer.excludedFrameForward",
+                                ("point", pointString),
+                                ("component", popover.attributes.tag ?? "nil")
+                            )
+                            return forwardTouchToPresentingView(
+                                point: point,
+                                windowPoint: windowPoint,
+                                event: event
+                            )
                         }
                     }
                     if let controller = popoverController {
@@ -464,6 +478,15 @@ public class PopoverContainerViewController: HostingParentController {
                 let frame = hit.convert(hit.bounds, to: resolvedWindow)
                 return NSCoder.string(for: frame)
             }()
+            popoverController?.popoverDebugLog(
+                "PopoverGestureContainer.forwardDecision",
+                ("label", label),
+                ("hit", hitType),
+                ("isWebView", isWebView),
+                ("windowPoint", windowPointDescription),
+                ("frame", frameInWindow),
+                ("hierarchy", hierarchy.joined(separator: " -> "))
+            )
         }
 
         private func hitTestPreferred(
@@ -531,17 +554,6 @@ public class PopoverContainerViewController: HostingParentController {
         let deltaWidth = abs(size.width - lastAppliedContentSize.width)
         let deltaHeight = abs(size.height - lastAppliedContentSize.height)
         guard deltaWidth > 0.5 || deltaHeight > 0.5 else { return }
-
-#if DEBUG
-        let tagDescription = popover.context.attributes.tag.map { String(describing: $0) } ?? "nil"
-        debugPrint(
-            "# CRASH popover.applyMeasuredContentSize",
-            "tag=\(tagDescription)",
-            "size={w:\(size.width),h:\(size.height)}",
-            "delta={w:\(deltaWidth),h:\(deltaHeight)}",
-            "preferred={w:\(preferredContentSize.width),h:\(preferredContentSize.height)}"
-        )
-#endif
 
         popover.updateFrame(with: size)
         updatePreferredContentSize(size: popover.context.size ?? size)
