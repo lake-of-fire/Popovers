@@ -8,8 +8,19 @@
 
 #if os(iOS)
 import Combine
+import Foundation
 import SwiftUI
 @_spi(Advanced) import SwiftUIIntrospect
+
+@inline(__always)
+private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
+    #if DEBUG
+    var payload = metadata
+    payload["stage"] = stage
+    payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
+    Swift.debugPrint("# LOOKUPOPEN", payload)
+    #endif
+}
 
 /**
  Present a popover in SwiftUI. Access using `.popover(present:attributes:view:)`.
@@ -96,6 +107,15 @@ struct PopoverModifier: ViewModifier {
                     guard oldValue != newValue else { return }
                     popover?.context.isOffsetInitialized = false
                     let tagDescription = popover?.attributes.tag.map { String(describing: $0) } ?? "nil"
+                    lookupOpenPopoverLog(
+                        "popovers.modifier.presentChanged",
+                        [
+                            "oldValue": oldValue,
+                            "newValue": newValue,
+                            "tag": tagDescription,
+                            "hasPopover": popover != nil
+                        ]
+                    )
 
                     /// Make sure there is a window first.
                     var window: UIWindow! = readWindow
@@ -105,6 +125,12 @@ struct PopoverModifier: ViewModifier {
                         if let keyWindow = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).flatMap({ $0.windows }).last(where: { $0.isKeyWindow }) {
                             window = keyWindow
                         } else {
+                            lookupOpenPopoverLog(
+                                "popovers.modifier.presentChanged.noWindow",
+                                [
+                                    "tag": tagDescription
+                                ]
+                            )
                             print("[Popovers] - Key window was not found either, skipping popover presentation.")
                             self.present = false
                             self.popover = nil /// Remove the reference to the popover.
@@ -144,6 +170,12 @@ struct PopoverModifier: ViewModifier {
                              */
                             popover?.context.onAutoDismiss = {
                                 let dismissTagDescription = popover?.attributes.tag.map { String(describing: $0) } ?? "nil"
+                                lookupOpenPopoverLog(
+                                    "popovers.modifier.autoDismiss",
+                                    [
+                                        "tag": dismissTagDescription
+                                    ]
+                                )
                                 self.present = false
                                 //                            self.popover = nil /// Remove the reference to the popover.
                             }
@@ -166,12 +198,31 @@ struct PopoverModifier: ViewModifier {
 
                         /// Present the popover.
                         let baseTouchTarget = contentView ?? contentSuperview
+                        lookupOpenPopoverLog(
+                            "popovers.modifier.present.invoke",
+                            [
+                                "tag": tagDescription,
+                                "baseTouchTarget": String(describing: type(of: baseTouchTarget))
+                            ]
+                        )
                         popover?.present(in: window, forwardBaseTouchesTo: baseTouchTarget)
+                        lookupOpenPopoverLog(
+                            "popovers.modifier.present.invoked",
+                            [
+                                "tag": tagDescription
+                            ]
+                        )
 
                     } else {
                         /// `$present` was set to `false`, dismiss the popover.
 
                         /// If there is still a popover, it means the client set `$present` to false.
+                        lookupOpenPopoverLog(
+                            "popovers.modifier.dismiss.invoke",
+                            [
+                                "tag": tagDescription
+                            ]
+                        )
                         popover?.dismiss()
                     }
                 }

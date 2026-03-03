@@ -60,6 +60,9 @@ extension Popover {
 
         /// Frames that won't be blocked when `blocksBackgroundTouches` is turned on.
         public var blocksBackgroundTouchesAllowedFrames: () -> [CGRect] = { [] }
+
+        /// Keep the overlay window/controller hierarchy alive after dismissal so it can be reused on the next present.
+        public var preservesOverlayWindowOnDismiss = false
         
         /// Stores accessibility values.
         public var accessibility = Accessibility()

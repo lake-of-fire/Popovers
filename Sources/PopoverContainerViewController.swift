@@ -10,6 +10,16 @@ import SwiftUI
 import Foundation
 import WebKit
 
+@inline(__always)
+private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
+    #if DEBUG
+    var payload = metadata
+    payload["stage"] = stage
+    payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
+    Swift.debugPrint("# LOOKUPOPEN", payload)
+    #endif
+}
+
 /**
  The View Controller that hosts `PopoverContainerView`. This is automatically managed.
  */
@@ -25,6 +35,8 @@ public class PopoverContainerViewController: HostingParentController {
     /// If this is nil, the view hasn't been laid out yet.
     var previousBounds: CGRect?
     private var lastAppliedContentSize: CGSize = .zero
+    private let createdAtUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+    private var didLogFirstLayout = false
     
     /**
      Create a new `PopoverContainerViewController`. This is automatically managed.
@@ -32,6 +44,12 @@ public class PopoverContainerViewController: HostingParentController {
     public init() {
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .overFullScreen
+        lookupOpenPopoverLog(
+            "popovers.container.init",
+            [
+                "controller": String(describing: ObjectIdentifier(self))
+            ]
+        )
     }
     
     @available(*, unavailable)
@@ -41,6 +59,17 @@ public class PopoverContainerViewController: HostingParentController {
     
     override public func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        if !didLogFirstLayout {
+            didLogFirstLayout = true
+            lookupOpenPopoverLog(
+                "popovers.container.firstLayout",
+                [
+                    "controller": String(describing: ObjectIdentifier(self)),
+                    "bounds": NSCoder.string(for: view.bounds),
+                    "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
+                ]
+            )
+        }
         
         /// Only update frames on a bounds change.
         if let previousBounds = previousBounds, previousBounds != view.bounds {
@@ -71,6 +100,13 @@ public class PopoverContainerViewController: HostingParentController {
 
     override public func viewDidLoad() {
         super.viewDidLoad()
+        lookupOpenPopoverLog(
+            "popovers.container.viewDidLoad",
+            [
+                "controller": String(describing: ObjectIdentifier(self)),
+                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
+            ]
+        )
         
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillShow), name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide), name: UIResponder.keyboardWillHideNotification, object: nil)
@@ -102,6 +138,16 @@ public class PopoverContainerViewController: HostingParentController {
     
     override public func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        lookupOpenPopoverLog(
+            "popovers.container.viewWillAppear",
+            [
+                "controller": String(describing: ObjectIdentifier(self)),
+                "overlayPresentation": isOverlayPresentation,
+                "hasOverlayWindow": overlayWindow != nil,
+                "hasBaseWindow": baseWindow != nil,
+                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
+            ]
+        )
         
         /// Use the presenting view controller's view as the next element in the gesture container's responder chain
         /// when a hit test indicates no popover was tapped.
@@ -151,16 +197,34 @@ public class PopoverContainerViewController: HostingParentController {
         return shouldRespect
     }
 
-    func teardownOverlayWindow() {
+    func teardownOverlayWindow(preserveRootViewController: Bool = false) {
         guard isOverlayPresentation else { return }
+        lookupOpenPopoverLog(
+            "popovers.container.teardownOverlayWindow.begin",
+            [
+                "controller": String(describing: ObjectIdentifier(self)),
+                "hasOverlayWindow": overlayWindow != nil,
+                "hasBaseWindow": baseWindow != nil,
+                "preserveRootViewController": preserveRootViewController
+            ]
+        )
         if let baseWindow {
             baseWindow.makeKey()
         }
         overlayWindow?.isHidden = true
-        overlayWindow?.rootViewController = nil
-        overlayWindow = nil
+        if !preserveRootViewController {
+            overlayWindow?.rootViewController = nil
+            overlayWindow = nil
+        }
         baseWindow = nil
         isOverlayPresentation = false
+        lookupOpenPopoverLog(
+            "popovers.container.teardownOverlayWindow.done",
+            [
+                "controller": String(describing: ObjectIdentifier(self)),
+                "preserveRootViewController": preserveRootViewController
+            ]
+        )
     }
     
     override public func didMove(toParent parent: UIViewController?) {
@@ -200,6 +264,13 @@ public class PopoverContainerViewController: HostingParentController {
             super.didMoveToWindow()
             
             if let window {
+                lookupOpenPopoverLog(
+                    "popovers.container.gesture.didMoveToWindow",
+                    [
+                        "window": String(describing: ObjectIdentifier(window)),
+                        "controllerAssigned": popoverController != nil
+                    ]
+                )
                 windowAvailable(window)
             }
         }
@@ -558,6 +629,14 @@ public class PopoverContainerViewController: HostingParentController {
         popover.updateFrame(with: size)
         updatePreferredContentSize(size: popover.context.size ?? size)
         lastAppliedContentSize = size
+        lookupOpenPopoverLog(
+            "popovers.container.applyMeasuredContentSize",
+            [
+                "controller": String(describing: ObjectIdentifier(self)),
+                "width": size.width,
+                "height": size.height
+            ]
+        )
     }
 
     @MainActor

@@ -7,7 +7,18 @@
 //
 
 #if os(iOS)
+import Foundation
 import SwiftUI
+
+@inline(__always)
+private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
+    #if DEBUG
+    var payload = metadata
+    payload["stage"] = stage
+    payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
+    Swift.debugPrint("# LOOKUPOPEN", payload)
+    #endif
+}
 
 public struct PopoverDragHandler {
     /// Called on drag change with the gesture's value.
@@ -133,6 +144,15 @@ struct PopoverInnerContainerView: View {
                     popover.updateFrame(with: size)
                     updatePopoverOffset(for: popover)
                     popoverModel.reload()
+                    lookupOpenPopoverLog(
+                        "popovers.containerView.firstSizeMeasured",
+                        [
+                            "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                            "presentationID": popover.context.presentationID.uuidString,
+                            "width": size.width,
+                            "height": size.height
+                        ]
+                    )
                 }
                 
                 if size != .zero {

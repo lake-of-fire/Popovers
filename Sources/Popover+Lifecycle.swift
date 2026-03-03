@@ -6,7 +6,18 @@
 //  Copyright © 2022 A. Zheng. All rights reserved.
 //
 #if os(iOS)
+import Foundation
 import SwiftUI
+
+@inline(__always)
+private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
+    #if DEBUG
+    var payload = metadata
+    payload["stage"] = stage
+    payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
+    Swift.debugPrint("# LOOKUPOPEN", payload)
+    #endif
+}
 
 /**
  Present a popover.
@@ -17,17 +28,39 @@ public extension Popover {
      */
     @MainActor
     internal func present(in window: UIWindow, forwardBaseTouchesTo: UIView?) {
+        let startedAtUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        let tagDescription = attributes.tag.map { String(describing: $0) } ?? "nil"
+        lookupOpenPopoverLog(
+            "popovers.lifecycle.present.begin",
+            [
+                "tag": tagDescription,
+                "window": String(describing: ObjectIdentifier(window)),
+                "hasForwardBaseTouchesTo": forwardBaseTouchesTo != nil
+            ]
+        )
         /// Use an overlay window to avoid reparenting issues in SwiftUI hosting hierarchies.
         let overlayWindow = PopoverOverlayWindows.shared.overlayWindow(for: window)
         let model = window.popoverModel
         let popoverViewController: PopoverContainerViewController
+        let reusedController: Bool
 
         if let existingPopoverViewController = overlayWindow.rootViewController as? PopoverContainerViewController {
             popoverViewController = existingPopoverViewController
+            reusedController = true
         } else {
             popoverViewController = PopoverContainerViewController()
             overlayWindow.rootViewController = popoverViewController
+            reusedController = false
         }
+        lookupOpenPopoverLog(
+            "popovers.lifecycle.present.containerReady",
+            [
+                "tag": tagDescription,
+                "reusedController": reusedController,
+                "controller": String(describing: ObjectIdentifier(popoverViewController)),
+                "overlayWindow": String(describing: ObjectIdentifier(overlayWindow))
+            ]
+        )
 
         popoverViewController.forwardBaseTouchesTo = forwardBaseTouchesTo ?? window.rootViewController?.view
         popoverViewController.overlayWindow = overlayWindow
@@ -59,6 +92,15 @@ public extension Popover {
         overlayWindow.isHidden = false
         overlayWindow.makeKeyAndVisible()
         displayPopover()
+        lookupOpenPopoverLog(
+            "popovers.lifecycle.present.displayed",
+            [
+                "tag": tagDescription,
+                "presentationID": context.presentationID.uuidString,
+                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - startedAtUptimeNanoseconds) / 1_000_000),
+                "reusedController": reusedController
+            ]
+        )
 
         if attributes.source == .stayAboveWindows {
             fatalError("stayAboveWindows removed until needed")
@@ -70,9 +112,20 @@ public extension Popover {
      */
     func dismiss() {
         guard let presentingViewController = context.presentedPopoverViewController else { return }
+        let startedAtUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         let tagDescription = attributes.tag.map { String(describing: $0) } ?? "nil"
+        lookupOpenPopoverLog(
+            "popovers.lifecycle.dismiss.begin",
+            [
+                "tag": tagDescription,
+                "isOverlayPresentation": presentingViewController.isOverlayPresentation,
+                "preservesOverlayWindowOnDismiss": attributes.preservesOverlayWindowOnDismiss
+            ]
+        )
         if presentingViewController.isOverlayPresentation {
-            presentingViewController.teardownOverlayWindow()
+            presentingViewController.teardownOverlayWindow(
+                preserveRootViewController: attributes.preservesOverlayWindowOnDismiss
+            )
         } else {
             presentingViewController.dismiss(animated: false)
         }
@@ -82,6 +135,13 @@ public extension Popover {
 
         /// Let the client know that the popover was automatically dismissed.
         attributes.onDismiss?()
+        lookupOpenPopoverLog(
+            "popovers.lifecycle.dismiss.done",
+            [
+                "tag": tagDescription,
+                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - startedAtUptimeNanoseconds) / 1_000_000)
+            ]
+        )
     }
 }
 
