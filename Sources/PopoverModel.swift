@@ -59,9 +59,7 @@ public class PopoverModel: ObservableObject {
     /// Adds a `Popover` to this model.
     @MainActor
     func add(_ popover: Popover) {
-        if self.popover == nil {
-            self.popover = popover
-        }
+        self.popover = popover
 //        popovers.append(popover)
     }
 

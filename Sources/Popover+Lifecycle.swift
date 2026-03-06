@@ -110,8 +110,10 @@ public extension Popover {
     /**
      Dismiss a popover.
      */
+    @MainActor
     func dismiss() {
         guard let presentingViewController = context.presentedPopoverViewController else { return }
+        let popoverModel = presentingViewController.view.popoverModel
         let startedAtUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         let tagDescription = attributes.tag.map { String(describing: $0) } ?? "nil"
         lookupOpenPopoverLog(
@@ -129,6 +131,7 @@ public extension Popover {
         } else {
             presentingViewController.dismiss(animated: false)
         }
+        popoverModel.popover = nil
 
         /// Let the internal SwiftUI modifiers know that the popover was automatically dismissed.
         context.onAutoDismiss?()
