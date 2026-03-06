@@ -12,13 +12,7 @@ import SwiftUI
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
-    let allowedStages: Set<String> = [
-        "popovers.lifecycle.present.begin",
-        "popovers.lifecycle.present.containerReady",
-        "popovers.lifecycle.present.displayed",
-        "popovers.lifecycle.dismiss.begin",
-        "popovers.lifecycle.dismiss.done"
-    ]
+    let allowedStages: Set<String> = []
     guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage

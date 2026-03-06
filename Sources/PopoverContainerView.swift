@@ -13,10 +13,7 @@ import SwiftUI
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
-    let allowedStages: Set<String> = [
-        "popovers.containerView.visibilityState",
-        "popovers.containerView.firstSizeMeasured"
-    ]
+    let allowedStages: Set<String> = []
     guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
@@ -63,12 +60,6 @@ struct PopoverInnerContainerView: View {
     var body: some View {
         /// All frames are calculated from the origin at the top-left, so use `.topLeading`.
         ZStack(alignment: .topLeading) {
-            Color.red.opacity(0.18)
-                .overlay(
-                    Rectangle()
-                        .stroke(Color.green, lineWidth: 4)
-                )
-
             /// Show the popover's background.
             popover.background
             
@@ -88,11 +79,6 @@ struct PopoverInnerContainerView: View {
                     width: popover.context.size?.width,
                     height: popover.context.size?.height,
                     alignment: .topLeading
-                )
-                .background(Color.yellow.opacity(0.4))
-                .overlay(
-                    Rectangle()
-                        .stroke(Color.blue, lineWidth: 4)
                 )
                 .clipped()
                 .contentShape(Rectangle())

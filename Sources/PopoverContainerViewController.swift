@@ -13,13 +13,7 @@ import WebKit
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
-    let allowedStages: Set<String> = [
-        "popovers.container.hostingAttached",
-        "popovers.container.hostingState",
-        "popovers.container.viewWillAppear",
-        "popovers.container.firstLayout",
-        "popovers.container.applyMeasuredContentSize"
-    ]
+    let allowedStages: Set<String> = []
     guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
