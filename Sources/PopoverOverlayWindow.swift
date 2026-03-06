@@ -32,7 +32,7 @@ final class PopoverOverlayWindows {
             window = PopoverOverlayWindow(frame: baseWindow.bounds)
         }
         window.baseWindow = baseWindow
-        window.windowLevel = baseWindow.windowLevel + 1
+        window.windowLevel = .alert + 1
         window.backgroundColor = UIColor.clear
         let weakWindowReference = Weak(pointee: baseWindow)
         windows[weakWindowReference] = window

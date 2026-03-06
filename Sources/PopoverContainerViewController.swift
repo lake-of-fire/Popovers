@@ -142,6 +142,7 @@ public class PopoverContainerViewController: HostingParentController {
             hostingController.willMove(toParent: self)
             addChild(hostingController)
             view.addSubview(hostingController.view)
+            view.bringSubviewToFront(hostingController.view)
             hostingController.didMove(toParent: self)
             hostingContentView = hostingController.view
             lookupOpenPopoverLog(
