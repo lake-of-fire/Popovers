@@ -98,12 +98,21 @@ public extension UIResponder {
      */
     var popoverModel: PopoverModel {
         /// If we're a view, continue to walk up the responder chain until we hit the root view.
-        if let view = self as? UIView, let superview = view.superview {
-            return superview.popoverModel
+        if let view = self as? UIView {
+            if let superview = view.superview {
+                return superview.popoverModel
+            }
+            if let window = view.window {
+                return window.popoverModel
+            }
         }
 
         /// If we're a window, we define the scoping for the model - access it.
         if let window = self as? UIWindow {
+            if let overlayWindow = window as? PopoverOverlayWindow,
+               let baseWindow = overlayWindow.baseWindow {
+                return WindowPopoverModels.shared.popoverModel(for: baseWindow)
+            }
             return WindowPopoverModels.shared.popoverModel(for: window)
         }
 

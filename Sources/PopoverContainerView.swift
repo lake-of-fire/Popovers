@@ -13,6 +13,11 @@ import SwiftUI
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
+    let allowedStages: Set<String> = [
+        "popovers.containerView.visibilityState",
+        "popovers.containerView.firstSizeMeasured"
+    ]
+    guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
@@ -113,6 +118,51 @@ struct PopoverInnerContainerView: View {
             }
             /// Hide the popover until its size has been calculated.
             .opacity((popover.context.size != nil && popover.context.isOffsetInitialized) ? 1 : 0)
+            .onAppear {
+                lookupOpenPopoverLog(
+                    "popovers.containerView.visibilityState",
+                    [
+                        "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                        "presentationID": popover.context.presentationID.uuidString,
+                        "hasContextSize": popover.context.size != nil,
+                        "isOffsetInitialized": popover.context.isOffsetInitialized,
+                        "opacityVisible": popover.context.size != nil && popover.context.isOffsetInitialized,
+                        "frame": NSCoder.string(for: popover.context.frame),
+                        "staticFrame": NSCoder.string(for: popover.context.staticFrame),
+                        "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
+                    ]
+                )
+            }
+            .onChange(of: popover.context.size) { newSize in
+                lookupOpenPopoverLog(
+                    "popovers.containerView.visibilityState",
+                    [
+                        "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                        "presentationID": popover.context.presentationID.uuidString,
+                        "hasContextSize": newSize != nil,
+                        "isOffsetInitialized": popover.context.isOffsetInitialized,
+                        "opacityVisible": newSize != nil && popover.context.isOffsetInitialized,
+                        "frame": NSCoder.string(for: popover.context.frame),
+                        "staticFrame": NSCoder.string(for: popover.context.staticFrame),
+                        "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
+                    ]
+                )
+            }
+            .onChange(of: popover.context.isOffsetInitialized) { isOffsetInitialized in
+                lookupOpenPopoverLog(
+                    "popovers.containerView.visibilityState",
+                    [
+                        "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                        "presentationID": popover.context.presentationID.uuidString,
+                        "hasContextSize": popover.context.size != nil,
+                        "isOffsetInitialized": isOffsetInitialized,
+                        "opacityVisible": popover.context.size != nil && isOffsetInitialized,
+                        "frame": NSCoder.string(for: popover.context.frame),
+                        "staticFrame": NSCoder.string(for: popover.context.staticFrame),
+                        "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
+                    ]
+                )
+            }
             /// Read the popover's size in the view.
             .sizeReader(presentationID: popover.context.presentationID) { size in
                 if size == .zero {

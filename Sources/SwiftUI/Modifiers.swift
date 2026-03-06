@@ -15,6 +15,14 @@ import SwiftUI
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
+    let allowedStages: Set<String> = [
+        "popovers.modifier.presentChanged",
+        "popovers.modifier.present.invoke",
+        "popovers.modifier.present.invoked",
+        "popovers.modifier.dismiss.invoke",
+        "popovers.modifier.autoDismiss"
+    ]
+    guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000

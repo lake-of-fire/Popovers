@@ -45,6 +45,9 @@ extension Popover {
 
         /// Padding to prevent the popover from overflowing off the screen.
         public var screenEdgePadding: (() -> UIEdgeInsets) = { UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16) }
+
+        /// Optional known size to seed the popover frame before SwiftUI finishes measuring.
+        public var initialContextSize: CGSize?
         
         /// Stores popover animation and transition values for presentation.
         public var presentation = Presentation()

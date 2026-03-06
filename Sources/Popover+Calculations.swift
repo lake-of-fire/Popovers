@@ -9,6 +9,20 @@
 #if os(iOS)
 import SwiftUI
 
+@inline(__always)
+private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
+    #if DEBUG
+    let allowedStages: Set<String> = [
+        "popovers.frame.calculated"
+    ]
+    guard allowedStages.contains(stage) else { return }
+    var payload = metadata
+    payload["stage"] = stage
+    payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
+    Swift.debugPrint("# LOOKUPOPEN", payload)
+    #endif
+}
+
 public extension Popover {
     /// Updates the popover's frame using its size.
     @MainActor
@@ -19,6 +33,16 @@ public extension Popover {
         context.frame = frame
         context.offset = CGSize(width: frame.origin.x, height: frame.origin.y)
         if let size, size != .zero {
+            lookupOpenPopoverLog(
+                "popovers.frame.calculated",
+                [
+                    "presentationID": context.presentationID.uuidString,
+                    "size": NSCoder.string(for: CGRect(origin: .zero, size: size)),
+                    "frame": NSCoder.string(for: frame),
+                    "sourceFrame": NSCoder.string(for: attributes.sourceFrame().inset(by: attributes.sourceFrameInset())),
+                    "windowBounds": NSCoder.string(for: context.windowBounds)
+                ]
+            )
         }
     }
 

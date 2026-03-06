@@ -13,6 +13,14 @@ import WebKit
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
+    let allowedStages: Set<String> = [
+        "popovers.container.hostingAttached",
+        "popovers.container.hostingState",
+        "popovers.container.viewWillAppear",
+        "popovers.container.firstLayout",
+        "popovers.container.applyMeasuredContentSize"
+    ]
+    guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
@@ -27,6 +35,7 @@ private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [
 public class PopoverContainerViewController: HostingParentController {
     /// The `UIView` used to handle gesture interactions for popovers.
     private var popoverGestureContainerView: PopoverGestureContainer?
+    private weak var hostingContentView: UIView?
 
     weak var overlayWindow: UIWindow?
     weak var baseWindow: UIWindow?
@@ -66,6 +75,14 @@ public class PopoverContainerViewController: HostingParentController {
                 [
                     "controller": String(describing: ObjectIdentifier(self)),
                     "bounds": NSCoder.string(for: view.bounds),
+                    "frame": NSCoder.string(for: view.frame),
+                    "alpha": view.alpha,
+                    "hidden": view.isHidden,
+                    "subviewCount": view.subviews.count,
+                    "subviewTypes": view.subviews.map { String(describing: type(of: $0)) },
+                    "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
+                    "hostingHidden": hostingContentView?.isHidden as Any,
+                    "hostingAlpha": hostingContentView?.alpha as Any,
                     "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
                 ]
             )
@@ -114,7 +131,7 @@ public class PopoverContainerViewController: HostingParentController {
 //    override public func loadView() {
         popoverGestureContainerView = PopoverGestureContainer(windowAvailable: { [unowned self] window in
             /// Embed `PopoverContainerView` in a view controller.
-            let popoverContainerView = PopoverContainerView(popoverModel: popoverModel)
+            let popoverContainerView = PopoverContainerView(popoverModel: window.popoverModel)
                 .environment(\.window, window)
             
             let hostingController = UIHostingController(rootView: popoverContainerView)
@@ -126,6 +143,18 @@ public class PopoverContainerViewController: HostingParentController {
             addChild(hostingController)
             view.addSubview(hostingController.view)
             hostingController.didMove(toParent: self)
+            hostingContentView = hostingController.view
+            lookupOpenPopoverLog(
+                "popovers.container.hostingAttached",
+                [
+                    "controller": String(describing: ObjectIdentifier(self)),
+                    "hostingFrame": NSCoder.string(for: hostingController.view.frame),
+                    "hostingBounds": NSCoder.string(for: hostingController.view.bounds),
+                    "hostingHidden": hostingController.view.isHidden,
+                    "hostingAlpha": hostingController.view.alpha,
+                    "subviewTypes": view.subviews.map { String(describing: type(of: $0)) }
+                ]
+            )
         })
         popoverGestureContainerView?.popoverController = self
         
@@ -145,7 +174,30 @@ public class PopoverContainerViewController: HostingParentController {
                 "overlayPresentation": isOverlayPresentation,
                 "hasOverlayWindow": overlayWindow != nil,
                 "hasBaseWindow": baseWindow != nil,
+                "viewFrame": NSCoder.string(for: view.frame),
+                "viewBounds": NSCoder.string(for: view.bounds),
+                "viewHidden": view.isHidden,
+                "viewAlpha": view.alpha,
+                "subviewCount": view.subviews.count,
+                "subviewTypes": view.subviews.map { String(describing: type(of: $0)) },
+                "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
+                "hostingHidden": hostingContentView?.isHidden as Any,
+                "hostingAlpha": hostingContentView?.alpha as Any,
+                "windowHidden": view.window?.isHidden as Any,
+                "windowKey": view.window?.isKeyWindow as Any,
                 "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
+            ]
+        )
+        lookupOpenPopoverLog(
+            "popovers.container.hostingState",
+            [
+                "controller": String(describing: ObjectIdentifier(self)),
+                "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
+                "hostingBounds": hostingContentView.map { NSCoder.string(for: $0.bounds) } as Any,
+                "hostingHidden": hostingContentView?.isHidden as Any,
+                "hostingAlpha": hostingContentView?.alpha as Any,
+                "hostingSuperview": hostingContentView?.superview.map { String(describing: type(of: $0)) } as Any,
+                "subviewTypes": view.subviews.map { String(describing: type(of: $0)) }
             ]
         )
         
@@ -634,7 +686,9 @@ public class PopoverContainerViewController: HostingParentController {
             [
                 "controller": String(describing: ObjectIdentifier(self)),
                 "width": size.width,
-                "height": size.height
+                "height": size.height,
+                "preferredContentSize": NSCoder.string(for: CGRect(origin: .zero, size: preferredContentSize)),
+                "currentContentSize": NSCoder.string(for: CGRect(origin: .zero, size: currentContentSize()))
             ]
         )
     }

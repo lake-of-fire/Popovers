@@ -12,6 +12,14 @@ import SwiftUI
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
+    let allowedStages: Set<String> = [
+        "popovers.lifecycle.present.begin",
+        "popovers.lifecycle.present.containerReady",
+        "popovers.lifecycle.present.displayed",
+        "popovers.lifecycle.dismiss.begin",
+        "popovers.lifecycle.dismiss.done"
+    ]
+    guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
@@ -35,7 +43,10 @@ public extension Popover {
             [
                 "tag": tagDescription,
                 "window": String(describing: ObjectIdentifier(window)),
-                "hasForwardBaseTouchesTo": forwardBaseTouchesTo != nil
+                "hasForwardBaseTouchesTo": forwardBaseTouchesTo != nil,
+                "windowLevel": window.windowLevel.rawValue,
+                "windowHidden": window.isHidden,
+                "windowKey": window.isKeyWindow
             ]
         )
         /// Use an overlay window to avoid reparenting issues in SwiftUI hosting hierarchies.
@@ -58,7 +69,10 @@ public extension Popover {
                 "tag": tagDescription,
                 "reusedController": reusedController,
                 "controller": String(describing: ObjectIdentifier(popoverViewController)),
-                "overlayWindow": String(describing: ObjectIdentifier(overlayWindow))
+                "overlayWindow": String(describing: ObjectIdentifier(overlayWindow)),
+                "overlayWindowLevel": overlayWindow.windowLevel.rawValue,
+                "overlayWindowHidden": overlayWindow.isHidden,
+                "rootViewController": String(describing: type(of: overlayWindow.rootViewController as Any))
             ]
         )
 
@@ -91,6 +105,15 @@ public extension Popover {
         
         overlayWindow.isHidden = false
         overlayWindow.makeKeyAndVisible()
+        if let initialContextSize = attributes.initialContextSize,
+           initialContextSize.width.isFinite,
+           initialContextSize.height.isFinite,
+           initialContextSize.width > 0,
+           initialContextSize.height > 0
+        {
+            updateFrame(with: initialContextSize)
+            context.isOffsetInitialized = true
+        }
         displayPopover()
         lookupOpenPopoverLog(
             "popovers.lifecycle.present.displayed",
@@ -98,7 +121,13 @@ public extension Popover {
                 "tag": tagDescription,
                 "presentationID": context.presentationID.uuidString,
                 "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - startedAtUptimeNanoseconds) / 1_000_000),
-                "reusedController": reusedController
+                "reusedController": reusedController,
+                "overlayWindowHidden": overlayWindow.isHidden,
+                "overlayWindowLevel": overlayWindow.windowLevel.rawValue,
+                "overlayWindowKey": overlayWindow.isKeyWindow,
+                "baseWindowKey": window.isKeyWindow,
+                "frame": NSCoder.string(for: context.frame),
+                "staticFrame": NSCoder.string(for: context.staticFrame)
             ]
         )
 
