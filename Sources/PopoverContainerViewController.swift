@@ -153,10 +153,14 @@ public class PopoverContainerViewController: HostingParentController {
             )
         })
         popoverGestureContainerView?.popoverController = self
-        
-        makeBackgroundsClear = false
+
+        // The popover shell has transparent rounded corners, so every host/container layer behind it
+        // must stay clear or UIKit backgrounds will show through at the corners.
+        makeBackgroundsClear = true
+        view.backgroundColor = .clear
         if let popoverGestureContainerView {
             popoverGestureContainerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            popoverGestureContainerView.backgroundColor = .clear
             view.addSubview(popoverGestureContainerView)
         }
     }
