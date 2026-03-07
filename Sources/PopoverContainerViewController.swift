@@ -38,6 +38,7 @@ public class PopoverContainerViewController: HostingParentController {
     /// If this is nil, the view hasn't been laid out yet.
     var previousBounds: CGRect?
     private var lastAppliedContentSize: CGSize = .zero
+    private var lastAppliedSourceFrame: CGRect?
     private let createdAtUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
     private var didLogFirstLayout = false
     
@@ -357,6 +358,24 @@ public class PopoverContainerViewController: HostingParentController {
             }
 
             if let popover = popover {
+                if popover.context.allowsPassthroughTouches {
+                    // Retained-hidden popovers keep their last frame for reuse, but that frame must stop intercepting touches while hidden.
+                    if let window {
+                        let converted = convert(point, to: window)
+                        windowPointForForwarding = converted
+                        baseWindowPointForForwarding = resolveBaseWindowPoint(from: point)
+                    } else {
+                        windowPointForForwarding = point
+                        baseWindowPointForForwarding = resolveBaseWindowPoint(from: point)
+                    }
+
+                    return forwardTouchToPresentingView(
+                        point: point,
+                        windowPoint: baseWindowPointForForwarding ?? windowPointForForwarding,
+                        event: event
+                    )
+                }
+
                 if popover.context.frame.contains(point) {
                     popoverController?.popoverDebugLog(
                         "PopoverGestureContainer.hitInside",
@@ -671,11 +690,23 @@ public class PopoverContainerViewController: HostingParentController {
         guard let popover = popoverModel.popover else { return }
         let deltaWidth = abs(size.width - lastAppliedContentSize.width)
         let deltaHeight = abs(size.height - lastAppliedContentSize.height)
-        guard deltaWidth > 0.5 || deltaHeight > 0.5 else { return }
+        let sourceFrame = popover.attributes.sourceFrame().inset(by: popover.attributes.sourceFrameInset())
+        let sourceFrameChanged: Bool
+        if let lastAppliedSourceFrame {
+            sourceFrameChanged =
+                abs(sourceFrame.origin.x - lastAppliedSourceFrame.origin.x) > 0.5 ||
+                abs(sourceFrame.origin.y - lastAppliedSourceFrame.origin.y) > 0.5 ||
+                abs(sourceFrame.size.width - lastAppliedSourceFrame.size.width) > 0.5 ||
+                abs(sourceFrame.size.height - lastAppliedSourceFrame.size.height) > 0.5
+        } else {
+            sourceFrameChanged = true
+        }
+        guard deltaWidth > 0.5 || deltaHeight > 0.5 || sourceFrameChanged else { return }
 
         popover.updateFrame(with: size)
         updatePreferredContentSize(size: popover.context.size ?? size)
         lastAppliedContentSize = size
+        lastAppliedSourceFrame = sourceFrame
         lookupOpenPopoverLog(
             "popovers.container.applyMeasuredContentSize",
             [
@@ -691,6 +722,13 @@ public class PopoverContainerViewController: HostingParentController {
     @MainActor
     public func refreshPopoverFrames() {
         popoverModel.updateFramesAfterBoundsChange()
+    }
+
+    @MainActor
+    public func setAllowsPassthroughTouches(_ allowsPassthroughTouches: Bool) {
+        guard let popover = popoverModel.popover else { return }
+        guard popover.context.allowsPassthroughTouches != allowsPassthroughTouches else { return }
+        popover.context.allowsPassthroughTouches = allowsPassthroughTouches
     }
 
     public func currentContentSize() -> CGSize {

@@ -39,6 +39,10 @@ public extension Popover {
         /// The current frame of the popover.
         @MainActor
         @Published public var frame = CGRect.zero
+
+        /// Forward touches through the overlay gesture container instead of intercepting them for this popover.
+        @MainActor
+        public var allowsPassthroughTouches = false
 //        let ee = UUID().uuidString.prefix(6)
         
         /// The currently selected anchor, if the popover has a `.relative` position.
