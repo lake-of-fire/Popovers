@@ -9,6 +9,15 @@
 import Combine
 import SwiftUI
 
+@MainActor
+public enum PopoversTestHooks {
+    public static var eventSink: ((String, [String: String]) -> Void)?
+
+    public static func emit(_ stage: String, _ metadata: [String: String] = [:]) {
+        eventSink?(stage, metadata)
+    }
+}
+
 /**
  A view that is placed over other views.
  */
@@ -19,11 +28,11 @@ public struct Popover: Identifiable {
      */
     public var context: Context
 
-    /// The view that the popover presents.
-    public var view: AnyView
+    /// Lazily build the view that the popover presents.
+    public var makeView: () -> AnyView
 
-    /// A view that goes behind the popover.
-    public var background: AnyView
+    /// Lazily build a view that goes behind the popover.
+    public var makeBackground: () -> AnyView
 
     /**
      Convenience accessor for the popover's ID.
@@ -58,8 +67,8 @@ public struct Popover: Identifiable {
         let context = Context()
         context.attributes = attributes
         self.context = context
-        self.view = AnyView(view().environmentObject(context))
-        background = AnyView(Color.clear)
+        self.makeView = { AnyView(view().environmentObject(context)) }
+        self.makeBackground = { AnyView(Color.clear) }
     }
 
     /**
@@ -76,8 +85,8 @@ public struct Popover: Identifiable {
         let context = Context()
         context.attributes = attributes
         self.context = context
-        self.view = AnyView(view().environmentObject(self.context))
-        self.background = AnyView(background().environmentObject(self.context))
+        self.makeView = { AnyView(view().environmentObject(context)) }
+        self.makeBackground = { AnyView(background().environmentObject(context)) }
     }
 }
 
