@@ -28,11 +28,11 @@ public struct Popover: Identifiable {
      */
     public var context: Context
 
-    /// Lazily build the view that the popover presents.
-    public var makeView: () -> AnyView
+    /// The view that the popover presents.
+    public var view: AnyView
 
-    /// Lazily build a view that goes behind the popover.
-    public var makeBackground: () -> AnyView
+    /// A view that goes behind the popover.
+    public var background: AnyView
 
     /**
      Convenience accessor for the popover's ID.
@@ -67,8 +67,8 @@ public struct Popover: Identifiable {
         let context = Context()
         context.attributes = attributes
         self.context = context
-        self.makeView = { AnyView(view().environmentObject(context)) }
-        self.makeBackground = { AnyView(Color.clear) }
+        self.view = AnyView(view().environmentObject(context))
+        self.background = AnyView(Color.clear)
     }
 
     /**
@@ -85,8 +85,8 @@ public struct Popover: Identifiable {
         let context = Context()
         context.attributes = attributes
         self.context = context
-        self.makeView = { AnyView(view().environmentObject(context)) }
-        self.makeBackground = { AnyView(background().environmentObject(context)) }
+        self.view = AnyView(view().environmentObject(context))
+        self.background = AnyView(background().environmentObject(context))
     }
 }
 

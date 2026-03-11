@@ -70,14 +70,14 @@ struct PopoverInnerContainerView: View {
         /// All frames are calculated from the origin at the top-left, so use `.topLeading`.
         ZStack(alignment: .topLeading) {
             /// Show the popover's background.
-            popover.makeBackground()
+            popover.background
             
             /// Show the popover's main content view.
             HStack(alignment: .top) {
                 Group {
                     if #available(iOS 18.3.1, *) {
                         ZStack {
-                            popover.makeView()
+                            popover.view
                                 .id(popover.id.uuidString)
                         }
                         .onAppear {
@@ -118,7 +118,7 @@ struct PopoverInnerContainerView: View {
                         }
                     } else {
                         ZStack {
-                            popover.makeView()
+                            popover.view
                             /// Force touch target refresh
                                 .id(popover.id.uuidString + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing) edit: needed for hit targets to be correct... maybe not iOS 18?
                         }

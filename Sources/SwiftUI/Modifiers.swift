@@ -44,11 +44,11 @@ struct PopoverModifier: ViewModifier {
     /// Build the attributes.
     let buildAttributes: (inout Popover.Attributes) -> Void
 
-    /// Lazily build the popover's view.
-    let makeView: () -> AnyView
+    /// The popover's view.
+    let view: AnyView
 
-    /// Lazily build the popover's background.
-    let makeBackground: () -> AnyView
+    /// The popover's background.
+    let background: AnyView
 
     /// Reference to the popover.
     @State var popover: Popover?
@@ -67,8 +67,8 @@ struct PopoverModifier: ViewModifier {
     ) {
         _present = present
         self.buildAttributes = buildAttributes
-        self.makeView = { AnyView(view()) }
-        self.makeBackground = { AnyView(Color.clear.allowsHitTesting(false)) }
+        self.view = AnyView(view())
+        self.background = AnyView(Color.clear.allowsHitTesting(false))
     }
     
     /// Create a popover with a background. Use `.popover(present:attributes:view:background:)` to access.
@@ -80,8 +80,8 @@ struct PopoverModifier: ViewModifier {
     ) {
         _present = present
         self.buildAttributes = buildAttributes
-        self.makeView = { AnyView(view()) }
-        self.makeBackground = { AnyView(background()) }
+        self.view = AnyView(view())
+        self.background = AnyView(background())
     }
     
     func body(content: Content) -> some View {
@@ -173,8 +173,8 @@ struct PopoverModifier: ViewModifier {
 
                         let freshPopover = Popover(
                             attributes: attributes,
-                            view: { makeView() },
-                            background: { makeBackground() }
+                            view: { view },
+                            background: { background }
                         )
                         freshPopover.context.onAutoDismiss = {
                             let dismissTagDescription = freshPopover.attributes.tag.map { String(describing: $0) } ?? "nil"
@@ -188,8 +188,6 @@ struct PopoverModifier: ViewModifier {
                             self.popover = nil
                         }
 
-                        /// Store a fresh reference for every presentation so the child tree is rebuilt
-                        /// from current SwiftUI state instead of stale modifier captures.
                         self.popover = freshPopover
 
                         /**
@@ -205,37 +203,35 @@ struct PopoverModifier: ViewModifier {
 
                         /// Present the popover.
                         let baseTouchTarget = contentView ?? contentSuperview
-                        DispatchQueue.main.async {
-                            lookupOpenPopoverLog(
-                                "popovers.modifier.present.invoke",
-                                [
-                                    "tag": tagDescription,
-                                    "baseTouchTarget": String(describing: type(of: baseTouchTarget))
-                                ]
-                            )
-                            Swift.debugPrint(
-                                "# LOOKUPSMAR10",
-                                [
-                                    "stage": "popovers.modifier.present.invoke",
-                                    "tag": tagDescription,
-                                    "baseTouchTarget": String(describing: type(of: baseTouchTarget))
-                                ] as [String : Any]
-                            )
-                            freshPopover.present(in: window, forwardBaseTouchesTo: baseTouchTarget)
-                            lookupOpenPopoverLog(
-                                "popovers.modifier.present.invoked",
-                                [
-                                    "tag": tagDescription
-                                ]
-                            )
-                            Swift.debugPrint(
-                                "# LOOKUPSMAR10",
-                                [
-                                    "stage": "popovers.modifier.present.invoked",
-                                    "tag": tagDescription
-                                ] as [String : Any]
-                            )
-                        }
+                        lookupOpenPopoverLog(
+                            "popovers.modifier.present.invoke",
+                            [
+                                "tag": tagDescription,
+                                "baseTouchTarget": String(describing: type(of: baseTouchTarget))
+                            ]
+                        )
+                        Swift.debugPrint(
+                            "# LOOKUPSMAR10",
+                            [
+                                "stage": "popovers.modifier.present.invoke",
+                                "tag": tagDescription,
+                                "baseTouchTarget": String(describing: type(of: baseTouchTarget))
+                            ] as [String : Any]
+                        )
+                        freshPopover.present(in: window, forwardBaseTouchesTo: baseTouchTarget)
+                        lookupOpenPopoverLog(
+                            "popovers.modifier.present.invoked",
+                            [
+                                "tag": tagDescription
+                            ]
+                        )
+                        Swift.debugPrint(
+                            "# LOOKUPSMAR10",
+                            [
+                                "stage": "popovers.modifier.present.invoked",
+                                "tag": tagDescription
+                            ] as [String : Any]
+                        )
 
                     } else {
                         /// `$present` was set to `false`, dismiss the popover.
