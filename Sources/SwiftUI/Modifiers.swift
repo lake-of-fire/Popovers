@@ -44,10 +44,10 @@ struct PopoverModifier: ViewModifier {
     /// Build the attributes.
     let buildAttributes: (inout Popover.Attributes) -> Void
 
-    /// The popover's view.
+    /// The view that the popover presents.
     let view: AnyView
 
-    /// The popover's background.
+    /// A view that goes behind the popover.
     let background: AnyView
 
     /// Reference to the popover.
@@ -58,7 +58,7 @@ struct PopoverModifier: ViewModifier {
 
     @State var contentView: UIView?
     @State var contentSuperview: UIView?
-    
+
     /// Create a popover. Use `.popover(present:attributes:view:)` to access.
     init<Content: View>(
         present: Binding<Bool>,
@@ -123,19 +123,9 @@ struct PopoverModifier: ViewModifier {
                             "hasPopover": popover != nil
                         ]
                     )
-                    Swift.debugPrint(
-                        "# LOOKUPSMAR10",
-                        [
-                            "stage": "popovers.modifier.presentChanged",
-                            "oldValue": oldValue,
-                            "newValue": newValue,
-                            "tag": tagDescription,
-                            "hasPopover": popover != nil
-                        ] as [String : Any]
-                    )
 
                     /// Make sure there is a window first.
-                    var window: UIWindow! = readWindow
+                    var window: UIWindow! = readWindow ?? contentView?.window ?? contentSuperview?.window
                     if window == nil {
                         print("[Popovers] - No window was found when presenting popover, falling back to key window. Please file a bug report (https://github.com/aheze/Popovers/issues).")
 
@@ -210,27 +200,12 @@ struct PopoverModifier: ViewModifier {
                                 "baseTouchTarget": String(describing: type(of: baseTouchTarget))
                             ]
                         )
-                        Swift.debugPrint(
-                            "# LOOKUPSMAR10",
-                            [
-                                "stage": "popovers.modifier.present.invoke",
-                                "tag": tagDescription,
-                                "baseTouchTarget": String(describing: type(of: baseTouchTarget))
-                            ] as [String : Any]
-                        )
                         freshPopover.present(in: window, forwardBaseTouchesTo: baseTouchTarget)
                         lookupOpenPopoverLog(
                             "popovers.modifier.present.invoked",
                             [
                                 "tag": tagDescription
                             ]
-                        )
-                        Swift.debugPrint(
-                            "# LOOKUPSMAR10",
-                            [
-                                "stage": "popovers.modifier.present.invoked",
-                                "tag": tagDescription
-                            ] as [String : Any]
                         )
 
                     } else {

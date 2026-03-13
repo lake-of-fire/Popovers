@@ -22,15 +22,6 @@ private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [
     #endif
 }
 
-@inline(__always)
-private func lookupSmar10PopoverVisibilityLog(_ stage: String, _ metadata: [String: Any] = [:]) {
-    #if DEBUG
-    var payload = metadata
-    payload["stage"] = stage
-    Swift.debugPrint("# LOOKUPSMAR10", payload)
-    #endif
-}
-
 public struct PopoverDragHandler {
     /// Called on drag change with the gesture's value.
     public var onChanged: (DragGesture.Value) -> Void
@@ -81,14 +72,6 @@ struct PopoverInnerContainerView: View {
                                 .id(popover.id.uuidString)
                         }
                         .onAppear {
-                            lookupSmar10PopoverVisibilityLog(
-                                "popovers.inner.popoverView.onAppear",
-                                [
-                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                                    "presentationID": popover.context.presentationID.uuidString,
-                                    "popoverID": popover.id.uuidString
-                                ]
-                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onAppear",
                                 [
@@ -99,14 +82,6 @@ struct PopoverInnerContainerView: View {
                             )
                         }
                         .onDisappear {
-                            lookupSmar10PopoverVisibilityLog(
-                                "popovers.inner.popoverView.onDisappear",
-                                [
-                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                                    "presentationID": popover.context.presentationID.uuidString,
-                                    "popoverID": popover.id.uuidString
-                                ]
-                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onDisappear",
                                 [
@@ -123,14 +98,6 @@ struct PopoverInnerContainerView: View {
                                 .id(popover.id.uuidString + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing) edit: needed for hit targets to be correct... maybe not iOS 18?
                         }
                         .onAppear {
-                            lookupSmar10PopoverVisibilityLog(
-                                "popovers.inner.popoverView.onAppear",
-                                [
-                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                                    "presentationID": popover.context.presentationID.uuidString,
-                                    "popoverID": popover.id.uuidString
-                                ]
-                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onAppear",
                                 [
@@ -141,14 +108,6 @@ struct PopoverInnerContainerView: View {
                             )
                         }
                         .onDisappear {
-                            lookupSmar10PopoverVisibilityLog(
-                                "popovers.inner.popoverView.onDisappear",
-                                [
-                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                                    "presentationID": popover.context.presentationID.uuidString,
-                                    "popoverID": popover.id.uuidString
-                                ]
-                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onDisappear",
                                 [
@@ -183,26 +142,8 @@ struct PopoverInnerContainerView: View {
                     onEnded: { value in handleDragEnded(value) }
                 ))
                 .onAppear {
-                    lookupSmar10PopoverVisibilityLog(
-                        "popovers.container.contentHost.onAppear",
-                        [
-                            "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                            "presentationID": popover.context.presentationID.uuidString,
-                            "hasContextSize": popover.context.size != nil,
-                            "isOffsetInitialized": popover.context.isOffsetInitialized,
-                            "frame": NSCoder.string(for: popover.context.frame),
-                            "staticFrame": NSCoder.string(for: popover.context.staticFrame)
-                        ]
-                    )
                 }
                 .onDisappear {
-                    lookupSmar10PopoverVisibilityLog(
-                        "popovers.container.contentHost.onDisappear",
-                        [
-                            "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                            "presentationID": popover.context.presentationID.uuidString
-                        ]
-                    )
                 }
                 
                 /// Have VoiceOver read the popover view first, before the dismiss button.
@@ -236,19 +177,6 @@ struct PopoverInnerContainerView: View {
                         "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
                     ]
                 )
-                lookupSmar10PopoverVisibilityLog(
-                    "popovers.containerView.visibilityState",
-                    [
-                        "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                        "presentationID": popover.context.presentationID.uuidString,
-                        "hasContextSize": popover.context.size != nil,
-                        "isOffsetInitialized": popover.context.isOffsetInitialized,
-                        "opacityVisible": popover.context.size != nil && popover.context.isOffsetInitialized,
-                        "frame": NSCoder.string(for: popover.context.frame),
-                        "staticFrame": NSCoder.string(for: popover.context.staticFrame),
-                        "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
-                    ]
-                )
             }
             .onChange(of: popover.context.size) { newSize in
                 lookupOpenPopoverLog(
@@ -264,35 +192,9 @@ struct PopoverInnerContainerView: View {
                         "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
                     ]
                 )
-                lookupSmar10PopoverVisibilityLog(
-                    "popovers.containerView.visibilityState",
-                    [
-                        "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                        "presentationID": popover.context.presentationID.uuidString,
-                        "hasContextSize": newSize != nil,
-                        "isOffsetInitialized": popover.context.isOffsetInitialized,
-                        "opacityVisible": newSize != nil && popover.context.isOffsetInitialized,
-                        "frame": NSCoder.string(for: popover.context.frame),
-                        "staticFrame": NSCoder.string(for: popover.context.staticFrame),
-                        "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
-                    ]
-                )
             }
             .onChange(of: popover.context.isOffsetInitialized) { isOffsetInitialized in
                 lookupOpenPopoverLog(
-                    "popovers.containerView.visibilityState",
-                    [
-                        "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                        "presentationID": popover.context.presentationID.uuidString,
-                        "hasContextSize": popover.context.size != nil,
-                        "isOffsetInitialized": isOffsetInitialized,
-                        "opacityVisible": popover.context.size != nil && isOffsetInitialized,
-                        "frame": NSCoder.string(for: popover.context.frame),
-                        "staticFrame": NSCoder.string(for: popover.context.staticFrame),
-                        "offset": NSCoder.string(for: CGRect(origin: CGPoint(x: popover.context.offset.width, y: popover.context.offset.height), size: .zero))
-                    ]
-                )
-                lookupSmar10PopoverVisibilityLog(
                     "popovers.containerView.visibilityState",
                     [
                         "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
@@ -338,15 +240,6 @@ struct PopoverInnerContainerView: View {
                     updatePopoverOffset(for: popover)
                     popoverModel.reload()
                     lookupOpenPopoverLog(
-                        "popovers.containerView.firstSizeMeasured",
-                        [
-                            "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
-                            "presentationID": popover.context.presentationID.uuidString,
-                            "width": size.width,
-                            "height": size.height
-                        ]
-                    )
-                    lookupSmar10PopoverVisibilityLog(
                         "popovers.containerView.firstSizeMeasured",
                         [
                             "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
@@ -583,25 +476,8 @@ struct PopoverContainerView: View {
             }
         }
         .onAppear {
-            lookupSmar10PopoverVisibilityLog(
-                "popovers.container.root.onAppear",
-                [
-                    "hasPopover": popoverModel.popover != nil,
-                    "tag": popoverModel.popover?.attributes.tag.map { String(describing: $0) } ?? "nil",
-                    "presentationID": popoverModel.popover?.context.presentationID.uuidString ?? "nil"
-                ]
-            )
         }
         .onChange(of: popoverModel.popover?.id) { newValue in
-            lookupSmar10PopoverVisibilityLog(
-                "popovers.container.root.popoverChanged",
-                [
-                    "hasPopover": popoverModel.popover != nil,
-                    "popoverID": newValue?.uuidString ?? "nil",
-                    "tag": popoverModel.popover?.attributes.tag.map { String(describing: $0) } ?? "nil",
-                    "presentationID": popoverModel.popover?.context.presentationID.uuidString ?? "nil"
-                ]
-            )
         }
         .edgesIgnoringSafeArea(.all) /// All calculations are done from the screen bounds.
     }

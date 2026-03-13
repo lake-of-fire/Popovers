@@ -22,15 +22,6 @@ private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [
     #endif
 }
 
-@inline(__always)
-private func lookupSmar10PopoverContainerLog(_ stage: String, _ metadata: [String: Any] = [:]) {
-    #if DEBUG
-    var payload = metadata
-    payload["stage"] = stage
-    Swift.debugPrint("# LOOKUPSMAR10", payload)
-    #endif
-}
-
 /**
  The View Controller that hosts `PopoverContainerView`. This is automatically managed.
  */
@@ -87,25 +78,6 @@ public class PopoverContainerViewController: HostingParentController {
                     "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
                     "hostingHidden": hostingContentView?.isHidden as Any,
                     "hostingAlpha": hostingContentView?.alpha as Any,
-                    "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
-                ]
-            )
-            lookupSmar10PopoverContainerLog(
-                "popovers.container.firstLayout",
-                [
-                    "controller": String(describing: ObjectIdentifier(self)),
-                    "bounds": NSCoder.string(for: view.bounds),
-                    "frame": NSCoder.string(for: view.frame),
-                    "alpha": view.alpha,
-                    "hidden": view.isHidden,
-                    "subviewCount": view.subviews.count,
-                    "subviewTypes": view.subviews.map { String(describing: type(of: $0)) },
-                    "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
-                    "hostingHidden": hostingContentView?.isHidden as Any,
-                    "hostingAlpha": hostingContentView?.alpha as Any,
-                    "viewBackgroundColor": String(describing: view.backgroundColor),
-                    "gestureBackgroundColor": String(describing: popoverGestureContainerView?.backgroundColor),
-                    "hostingBackgroundColor": String(describing: hostingContentView?.backgroundColor),
                     "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
                 ]
             )
@@ -179,18 +151,6 @@ public class PopoverContainerViewController: HostingParentController {
                     "subviewTypes": view.subviews.map { String(describing: type(of: $0)) }
                 ]
             )
-            lookupSmar10PopoverContainerLog(
-                "popovers.container.hostingAttached",
-                [
-                    "controller": String(describing: ObjectIdentifier(self)),
-                    "hostingFrame": NSCoder.string(for: hostingController.view.frame),
-                    "hostingBounds": NSCoder.string(for: hostingController.view.bounds),
-                    "hostingHidden": hostingController.view.isHidden,
-                    "hostingAlpha": hostingController.view.alpha,
-                    "hostingBackgroundColor": String(describing: hostingController.view.backgroundColor),
-                    "subviewTypes": view.subviews.map { String(describing: type(of: $0)) }
-                ]
-            )
         })
         popoverGestureContainerView?.popoverController = self
 
@@ -228,30 +188,6 @@ public class PopoverContainerViewController: HostingParentController {
                 "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
             ]
         )
-        lookupSmar10PopoverContainerLog(
-            "popovers.container.viewWillAppear",
-            [
-                "controller": String(describing: ObjectIdentifier(self)),
-                "overlayPresentation": isOverlayPresentation,
-                "hasOverlayWindow": overlayWindow != nil,
-                "hasBaseWindow": baseWindow != nil,
-                "viewFrame": NSCoder.string(for: view.frame),
-                "viewBounds": NSCoder.string(for: view.bounds),
-                "viewHidden": view.isHidden,
-                "viewAlpha": view.alpha,
-                "subviewCount": view.subviews.count,
-                "subviewTypes": view.subviews.map { String(describing: type(of: $0)) },
-                "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
-                "hostingHidden": hostingContentView?.isHidden as Any,
-                "hostingAlpha": hostingContentView?.alpha as Any,
-                "viewBackgroundColor": String(describing: view.backgroundColor),
-                "gestureBackgroundColor": String(describing: popoverGestureContainerView?.backgroundColor),
-                "hostingBackgroundColor": String(describing: hostingContentView?.backgroundColor),
-                "windowHidden": view.window?.isHidden as Any,
-                "windowKey": view.window?.isKeyWindow as Any,
-                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - createdAtUptimeNanoseconds) / 1_000_000)
-            ]
-        )
         lookupOpenPopoverLog(
             "popovers.container.hostingState",
             [
@@ -260,19 +196,6 @@ public class PopoverContainerViewController: HostingParentController {
                 "hostingBounds": hostingContentView.map { NSCoder.string(for: $0.bounds) } as Any,
                 "hostingHidden": hostingContentView?.isHidden as Any,
                 "hostingAlpha": hostingContentView?.alpha as Any,
-                "hostingSuperview": hostingContentView?.superview.map { String(describing: type(of: $0)) } as Any,
-                "subviewTypes": view.subviews.map { String(describing: type(of: $0)) }
-            ]
-        )
-        lookupSmar10PopoverContainerLog(
-            "popovers.container.hostingState",
-            [
-                "controller": String(describing: ObjectIdentifier(self)),
-                "hostingFrame": hostingContentView.map { NSCoder.string(for: $0.frame) } as Any,
-                "hostingBounds": hostingContentView.map { NSCoder.string(for: $0.bounds) } as Any,
-                "hostingHidden": hostingContentView?.isHidden as Any,
-                "hostingAlpha": hostingContentView?.alpha as Any,
-                "hostingBackgroundColor": String(describing: hostingContentView?.backgroundColor),
                 "hostingSuperview": hostingContentView?.superview.map { String(describing: type(of: $0)) } as Any,
                 "subviewTypes": view.subviews.map { String(describing: type(of: $0)) }
             ]

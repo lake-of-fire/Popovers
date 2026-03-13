@@ -43,18 +43,6 @@ public extension Popover {
                 "windowKey": window.isKeyWindow
             ]
         )
-        Swift.debugPrint(
-            "# LOOKUPSMAR10",
-            [
-                "stage": "popovers.lifecycle.present.begin",
-                "tag": tagDescription,
-                "window": String(describing: ObjectIdentifier(window)),
-                "hasForwardBaseTouchesTo": forwardBaseTouchesTo != nil,
-                "windowLevel": window.windowLevel.rawValue,
-                "windowHidden": window.isHidden,
-                "windowKey": window.isKeyWindow
-            ] as [String: Any]
-        )
         /// Use an overlay window to avoid reparenting issues in SwiftUI hosting hierarchies.
         let overlayWindow = PopoverOverlayWindows.shared.overlayWindow(for: window)
         let model = window.popoverModel
@@ -136,22 +124,6 @@ public extension Popover {
                 "staticFrame": NSCoder.string(for: context.staticFrame)
             ]
         )
-        Swift.debugPrint(
-            "# LOOKUPSMAR10",
-            [
-                "stage": "popovers.lifecycle.present.displayed",
-                "tag": tagDescription,
-                "presentationID": context.presentationID.uuidString,
-                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - startedAtUptimeNanoseconds) / 1_000_000),
-                "reusedController": reusedController,
-                "overlayWindowHidden": overlayWindow.isHidden,
-                "overlayWindowLevel": overlayWindow.windowLevel.rawValue,
-                "overlayWindowKey": overlayWindow.isKeyWindow,
-                "baseWindowKey": window.isKeyWindow,
-                "frame": NSCoder.string(for: context.frame),
-                "staticFrame": NSCoder.string(for: context.staticFrame)
-            ] as [String: Any]
-        )
 
         if attributes.source == .stayAboveWindows {
             fatalError("stayAboveWindows removed until needed")
@@ -175,15 +147,6 @@ public extension Popover {
                 "preservesOverlayWindowOnDismiss": attributes.preservesOverlayWindowOnDismiss
             ]
         )
-        Swift.debugPrint(
-            "# LOOKUPSMAR10",
-            [
-                "stage": "popovers.lifecycle.dismiss.begin",
-                "tag": tagDescription,
-                "isOverlayPresentation": presentingViewController.isOverlayPresentation,
-                "preservesOverlayWindowOnDismiss": attributes.preservesOverlayWindowOnDismiss
-            ] as [String: Any]
-        )
         if presentingViewController.isOverlayPresentation {
             presentingViewController.teardownOverlayWindow(
                 preserveRootViewController: attributes.preservesOverlayWindowOnDismiss
@@ -204,14 +167,6 @@ public extension Popover {
                 "tag": tagDescription,
                 "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - startedAtUptimeNanoseconds) / 1_000_000)
             ]
-        )
-        Swift.debugPrint(
-            "# LOOKUPSMAR10",
-            [
-                "stage": "popovers.lifecycle.dismiss.done",
-                "tag": tagDescription,
-                "elapsedMs": Int((DispatchTime.now().uptimeNanoseconds - startedAtUptimeNanoseconds) / 1_000_000)
-            ] as [String: Any]
         )
     }
 }

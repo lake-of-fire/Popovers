@@ -11,6 +11,8 @@ import SwiftUI
 
 @MainActor
 public enum PopoversTestHooks {
+    /// Test-only stage sink for Popovers shell/container mount assertions in non-UI tests.
+    /// This is intentionally separate from product logging.
     public static var eventSink: ((String, [String: String]) -> Void)?
 
     public static func emit(_ stage: String, _ metadata: [String: String] = [:]) {
