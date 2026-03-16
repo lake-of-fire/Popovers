@@ -13,12 +13,17 @@ import WebKit
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
-    let allowedStages: Set<String> = []
+    let allowedStages: Set<String> = [
+        "popovers.container.viewDidLoad",
+        "popovers.container.viewWillAppear",
+        "popovers.container.hostingAttached",
+        "popovers.container.firstLayout"
+    ]
     guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
-    Swift.debugPrint("# LOOKUPOPEN", payload)
+    Swift.debugPrint("# LOOKUPSMAR10", payload)
     #endif
 }
 
@@ -126,7 +131,7 @@ public class PopoverContainerViewController: HostingParentController {
 //    override public func loadView() {
         popoverGestureContainerView = PopoverGestureContainer(windowAvailable: { [unowned self] window in
             /// Embed `PopoverContainerView` in a view controller.
-            let popoverContainerView = PopoverContainerView(popoverModel: window.popoverModel)
+            let popoverContainerView = PopoverContainerView(popoverModel: popoverModel)
                 .environment(\.window, window)
             
             let hostingController = UIHostingController(rootView: popoverContainerView)

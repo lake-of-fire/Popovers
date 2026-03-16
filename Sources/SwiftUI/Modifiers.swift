@@ -17,6 +17,7 @@ private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [
     #if DEBUG
     let allowedStages: Set<String> = [
         "popovers.modifier.presentChanged",
+        "popovers.modifier.presentChanged.noWindow",
         "popovers.modifier.present.invoke",
         "popovers.modifier.present.invoked",
         "popovers.modifier.dismiss.invoke",
@@ -26,7 +27,7 @@ private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
-    Swift.debugPrint("# LOOKUPOPEN", payload)
+    Swift.debugPrint("# LOOKUPSMAR10", payload)
     #endif
 }
 

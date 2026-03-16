@@ -13,12 +13,18 @@ import SwiftUI
 @inline(__always)
 private func lookupOpenPopoverLog(_ stage: String, _ metadata: [String: Any] = [:]) {
     #if DEBUG
-    let allowedStages: Set<String> = []
+    let allowedStages: Set<String> = [
+        "popovers.inner.popoverView.onAppear",
+        "popovers.inner.popoverView.onDisappear",
+        "popovers.container.visibilityState",
+        "popovers.container.sizeReported",
+        "popovers.container.offsetInitialized"
+    ]
     guard allowedStages.contains(stage) else { return }
     var payload = metadata
     payload["stage"] = stage
     payload["uptimeMs"] = DispatchTime.now().uptimeNanoseconds / 1_000_000
-    Swift.debugPrint("# LOOKUPOPEN", payload)
+    Swift.debugPrint("# LOOKUPSMAR10", payload)
     #endif
 }
 
@@ -72,6 +78,14 @@ struct PopoverInnerContainerView: View {
                                 .id(popover.id.uuidString)
                         }
                         .onAppear {
+                            lookupOpenPopoverLog(
+                                "popovers.inner.popoverView.onAppear",
+                                [
+                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                                    "presentationID": popover.context.presentationID.uuidString,
+                                    "popoverID": popover.id.uuidString
+                                ]
+                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onAppear",
                                 [
@@ -82,6 +96,14 @@ struct PopoverInnerContainerView: View {
                             )
                         }
                         .onDisappear {
+                            lookupOpenPopoverLog(
+                                "popovers.inner.popoverView.onDisappear",
+                                [
+                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                                    "presentationID": popover.context.presentationID.uuidString,
+                                    "popoverID": popover.id.uuidString
+                                ]
+                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onDisappear",
                                 [
@@ -98,6 +120,14 @@ struct PopoverInnerContainerView: View {
                                 .id(popover.id.uuidString + popover.context.isOffsetInitialized.description) // Seems to not be needed anymore (the init thing) edit: needed for hit targets to be correct... maybe not iOS 18?
                         }
                         .onAppear {
+                            lookupOpenPopoverLog(
+                                "popovers.inner.popoverView.onAppear",
+                                [
+                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                                    "presentationID": popover.context.presentationID.uuidString,
+                                    "popoverID": popover.id.uuidString
+                                ]
+                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onAppear",
                                 [
@@ -108,6 +138,14 @@ struct PopoverInnerContainerView: View {
                             )
                         }
                         .onDisappear {
+                            lookupOpenPopoverLog(
+                                "popovers.inner.popoverView.onDisappear",
+                                [
+                                    "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                                    "presentationID": popover.context.presentationID.uuidString,
+                                    "popoverID": popover.id.uuidString
+                                ]
+                            )
                             PopoversTestHooks.emit(
                                 "popovers.inner.popoverView.onDisappear",
                                 [
@@ -165,7 +203,7 @@ struct PopoverInnerContainerView: View {
             .opacity((popover.context.size != nil && popover.context.isOffsetInitialized) ? 1 : 0)
             .onAppear {
                 lookupOpenPopoverLog(
-                    "popovers.containerView.visibilityState",
+                    "popovers.container.visibilityState",
                     [
                         "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
                         "presentationID": popover.context.presentationID.uuidString,
@@ -180,7 +218,7 @@ struct PopoverInnerContainerView: View {
             }
             .onChange(of: popover.context.size) { newSize in
                 lookupOpenPopoverLog(
-                    "popovers.containerView.visibilityState",
+                    "popovers.container.visibilityState",
                     [
                         "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
                         "presentationID": popover.context.presentationID.uuidString,
@@ -195,7 +233,7 @@ struct PopoverInnerContainerView: View {
             }
             .onChange(of: popover.context.isOffsetInitialized) { isOffsetInitialized in
                 lookupOpenPopoverLog(
-                    "popovers.containerView.visibilityState",
+                    "popovers.container.visibilityState",
                     [
                         "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
                         "presentationID": popover.context.presentationID.uuidString,
@@ -240,7 +278,21 @@ struct PopoverInnerContainerView: View {
                     updatePopoverOffset(for: popover)
                     popoverModel.reload()
                     lookupOpenPopoverLog(
-                        "popovers.containerView.firstSizeMeasured",
+                        "popovers.container.sizeReported",
+                        [
+                            "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                            "presentationID": popover.context.presentationID.uuidString,
+                            "width": size.width,
+                            "height": size.height,
+                            "reason": "firstMeasure"
+                        ]
+                    )
+                }
+                
+                if size != .zero {
+                    popover.context.isOffsetInitialized = true
+                    lookupOpenPopoverLog(
+                        "popovers.container.offsetInitialized",
                         [
                             "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
                             "presentationID": popover.context.presentationID.uuidString,
@@ -248,10 +300,6 @@ struct PopoverInnerContainerView: View {
                             "height": size.height
                         ]
                     )
-                }
-                
-                if size != .zero {
-                    popover.context.isOffsetInitialized = true
                 }
             }
             
@@ -303,8 +351,19 @@ struct PopoverInnerContainerView: View {
         let frameDescription = NSCoder.string(for: popover.context.frame)
         let offsetDescription = "{w: \(Int(popover.context.offset.width)), h: \(Int(popover.context.offset.height))}"
         let mismatch = contextSize.map { abs($0.width - size.width) > 1 || abs($0.height - size.height) > 1 } ?? true
-        if mismatch {
-        }
+        lookupOpenPopoverLog(
+            "popovers.container.sizeReported",
+            [
+                "tag": popover.attributes.tag.map { String(describing: $0) } ?? "nil",
+                "presentationID": popover.context.presentationID.uuidString,
+                "width": size.width,
+                "height": size.height,
+                "contextSize": contextSizeDescription,
+                "frame": frameDescription,
+                "offset": offsetDescription,
+                "mismatch": mismatch
+            ]
+        )
     }
     
     /**
