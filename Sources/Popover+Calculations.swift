@@ -17,6 +17,7 @@ public extension Popover {
         context.size = size
         context.staticFrame = frame
         context.frame = frame
+        context.offset = CGSize(width: frame.origin.x, height: frame.origin.y)
     }
 
     /// Calculate the popover's frame based on its size and position.

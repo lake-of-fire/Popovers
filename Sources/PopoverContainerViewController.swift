@@ -101,6 +101,20 @@ public class PopoverContainerViewController: HostingParentController {
         }
     }
 
+    @MainActor
+    public func refreshPopoverFrames() {
+        popoverModel.updateFramesAfterBoundsChange()
+    }
+
+    @MainActor
+    public func updatePresentedPopoverAttributes(_ update: (inout Popover.Attributes) -> Void) {
+        guard var popover = popoverModel.popover else { return }
+        var attributes = popover.attributes
+        update(&attributes)
+        popover.attributes = attributes
+        popoverModel.popover = popover
+    }
+
     private class PopoverGestureContainer: UIView {
         private let windowAvailable: (UIWindow) -> Void
         
@@ -136,9 +150,50 @@ public class PopoverContainerViewController: HostingParentController {
             /// Only loop through the popovers that are in this window.
 //            let popovers = popoverModel.popovers
             
-            /// The current popovers' frames
+            /// The current popover's frame.
+            /// Recalculate it on demand so hit-testing stays aligned when the keyboard
+            /// changes safe-area-driven positioning before the cached context frame settles.
 //            let popoverFrames = popovers.map { $0.context.frame }
-            let popoverFrame = popoverModel.popover?.context.frame
+            let popoverFrame = popoverModel.popover.map { popover in
+                popover.calculateFrame(from: popover.context.size)
+            }
+            let cachedPopoverFrame = popoverModel.popover?.context.frame
+
+            func logLookupKeyboard(
+                _ stage: String,
+                popover: Popover?,
+                excludedFrames: [CGRect] = [],
+                allowedFrames: [CGRect] = [],
+                result: String
+            ) {
+                debugPrint(
+                    "# LOOKUPKEYBOARD",
+                    [
+                        "stage": stage,
+                        "point": NSCoder.string(for: CGRect(origin: point, size: .zero)),
+                        "eventType": event?.type.rawValue as Any,
+                        "popoverID": popover?.id.uuidString as Any,
+                        "cachedFrame": cachedPopoverFrame.map(NSCoder.string(for:)) as Any,
+                        "calculatedFrame": popoverFrame.map(NSCoder.string(for:)) as Any,
+                        "excludedFrames": excludedFrames.map(NSCoder.string(for:)),
+                        "allowedFrames": allowedFrames.map(NSCoder.string(for:)),
+                        "safeAreaInsets": NSCoder.string(for: superview?.safeAreaInsets ?? safeAreaInsets),
+                        "keyboardInsetBottom": superview?.safeAreaInsets.bottom ?? safeAreaInsets.bottom,
+                        "result": result
+                    ] as [String: Any]
+                )
+            }
+
+            func hitTestHostedSiblings() -> UIView? {
+                guard let superview else { return nil }
+                for sibling in superview.subviews.reversed() where sibling !== self {
+                    let siblingPoint = sibling.convert(point, from: self)
+                    if let hit = sibling.hitTest(siblingPoint, with: event) {
+                        return hit
+                    }
+                }
+                return nil
+            }
 
             /// Dismiss a popover, knowing that its frame does not contain the touch.
             func dismissPopoverIfNecessary(popoverToDismiss: Popover) {
@@ -148,6 +203,11 @@ public class PopoverContainerViewController: HostingParentController {
 //                        !popoverFrames.contains(where: { $0.contains(point) }) /// ... no other popover frame contains the point (the touch landed outside)
                         !(popoverFrame?.contains(point) ?? false) /// ... no other popover frame contains the point (the touch landed outside)
                 {
+                    logLookupKeyboard(
+                        "dismissPopoverIfNecessary",
+                        popover: popoverToDismiss,
+                        result: "dismiss"
+                    )
                     popoverToDismiss.dismiss()
                 }
             }
@@ -157,7 +217,7 @@ public class PopoverContainerViewController: HostingParentController {
             if let popover = popoverModel.popover {
             //            for popover in popovers.reversed() {
                 /// Check it the popover was hit.
-                if popover.context.frame.contains(point) {
+                if popoverFrame?.contains(point) ?? false {
                     /// Dismiss other popovers if they have `tapOutsideIncludesOtherPopovers` set to true.
 //                    for popoverToDismiss in popovers {
 //                        if
@@ -169,11 +229,30 @@ public class PopoverContainerViewController: HostingParentController {
 //                    }
                     
                     /// Receive the touch and block it from going through.
-                    return super.hitTest(point, with: event)
+                    let hit = super.hitTest(point, with: event)
+                    let hitIsGestureContainer = (hit === self) || String(describing: type(of: hit)).contains("PopoverGestureContainer")
+                    if hitIsGestureContainer, let siblingHit = hitTestHostedSiblings() {
+                        logLookupKeyboard(
+                            "hitPopover.forwardSibling",
+                            popover: popover,
+                            result: "returnSibling:\(String(describing: siblingHit))"
+                        )
+                        return siblingHit
+                    }
+                    if hitIsGestureContainer {
+                        logLookupKeyboard(
+                            "hitPopover.gestureContainerOnly",
+                            popover: popover,
+                            result: "returnSuper:\(String(describing: hit))"
+                        )
+                    }
+                    logLookupKeyboard(
+                        "hitPopover",
+                        popover: popover,
+                        result: "returnSuper:\(String(describing: hit))"
+                    )
+                    return hit
                 }
-                
-                /// The popover was not hit, so let it know that the user tapped outside.
-                popover.attributes.onTapOutside?()
                 
                 /// If the popover has `blocksBackgroundTouches` set to true, stop underlying views from receiving the touch.
                 if popover.attributes.blocksBackgroundTouches {
@@ -183,10 +262,24 @@ public class PopoverContainerViewController: HostingParentController {
                         dismissPopoverIfNecessary(popoverToDismiss: popover)
                         
 //                        return nil
-                        return presentingViewGestureTarget?.hitTest(point, with: event)
+                        let hit = presentingViewGestureTarget?.hitTest(point, with: event)
+                        logLookupKeyboard(
+                            "blocksBackgroundTouches.allowed",
+                            popover: popover,
+                            allowedFrames: allowedFrames,
+                            result: "returnPresenting:\(String(describing: hit))"
+                        )
+                        return hit
                     } else {
                         /// Receive the touch and block it from going through.
-                        return super.hitTest(point, with: event)
+                        let hit = super.hitTest(point, with: event)
+                        logLookupKeyboard(
+                            "blocksBackgroundTouches.block",
+                            popover: popover,
+                            allowedFrames: allowedFrames,
+                            result: "returnSuper:\(String(describing: hit))"
+                        )
+                        return hit
                     }
                 }
                 
@@ -200,20 +293,45 @@ public class PopoverContainerViewController: HostingParentController {
                          */
 //                        if popoverFrames.contains(where: { $0.contains(point) }) {
                         if popoverFrame?.contains(point) ?? false {
-                            return super.hitTest(point, with: event)
+                            let hit = super.hitTest(point, with: event)
+                            logLookupKeyboard(
+                                "excluded.hitPopover",
+                                popover: popover,
+                                excludedFrames: excludedFrames,
+                                result: "returnSuper:\(String(describing: hit))"
+                            )
+                            return hit
                         } else {
+                            logLookupKeyboard(
+                                "excluded.passThrough",
+                                popover: popover,
+                                excludedFrames: excludedFrames,
+                                result: "returnNil"
+                            )
                             return nil
                         }
                     }
                 }
                 
                 /// All checks did not pass, which means the touch landed outside the popover. So, dismiss it if necessary.
+                logLookupKeyboard(
+                    "outside.beforeDismiss",
+                    popover: popover,
+                    result: "invokeOnTapOutside"
+                )
+                popover.attributes.onTapOutside?()
                 dismissPopoverIfNecessary(popoverToDismiss: popover)
             }
             
             /// The touch did not hit any popover, so pass it through to the hit testing target.
 //            return nil
-            return presentingViewGestureTarget?.hitTest(point, with: event)
+            let hit = presentingViewGestureTarget?.hitTest(point, with: event)
+            logLookupKeyboard(
+                "noPopover.passThrough",
+                popover: nil,
+                result: "returnPresenting:\(String(describing: hit))"
+            )
+            return hit
         }
     }
 }
