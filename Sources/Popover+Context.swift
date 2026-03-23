@@ -39,6 +39,10 @@ public extension Popover {
         /// The current frame of the popover.
         @MainActor
         @Published public var frame = CGRect.zero
+
+        /// The visible keyboard frame converted into window coordinates.
+        @MainActor
+        @Published internal var keyboardFrameInWindow = CGRect.zero
 //        let ee = UUID().uuidString.prefix(6)
         
         /// The currently selected anchor, if the popover has a `.relative` position.

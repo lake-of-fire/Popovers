@@ -24,42 +24,22 @@ public extension Popover {
     @MainActor
     func calculateFrame(from size: CGSize?) -> CGRect {
         guard let window = context.presentedPopoverViewController?.view.window else { return .zero }
+        let screenEdgePadding = attributes.screenEdgePadding()
+        let safeWindowFrame = availableWindowFrame(
+            in: window,
+            keyboardFrame: context.keyboardFrameInWindow,
+            screenEdgePadding: screenEdgePadding
+        )
+        var popoverFrame = CGRect.zero
 
         switch attributes.position {
         case let .absolute(originAnchor, popoverAnchor):
-            var popoverFrame = attributes.position.absoluteFrame(
+            popoverFrame = attributes.position.absoluteFrame(
                 originAnchor: originAnchor,
                 popoverAnchor: popoverAnchor,
                 originFrame: attributes.sourceFrame().inset(by: attributes.sourceFrameInset()),
                 popoverSize: size ?? .zero
             )
-
-            let screenEdgePadding = attributes.screenEdgePadding()
-
-//            context.presentedPopoverViewController?.view.safeAreaInsets
-            let safeWindowFrame = window.safeAreaLayoutGuide.layoutFrame
-            let maxX = safeWindowFrame.maxX - screenEdgePadding.right
-            let maxY = safeWindowFrame.maxY - screenEdgePadding.bottom
-
-            /// Popover overflows on left/top side.
-            if popoverFrame.origin.x < screenEdgePadding.left {
-                popoverFrame.origin.x = screenEdgePadding.left
-            }
-            if popoverFrame.origin.y < screenEdgePadding.top {
-                popoverFrame.origin.y = screenEdgePadding.top
-            }
-
-            /// Popover overflows on the right/bottom side.
-            if popoverFrame.maxX > maxX {
-                let difference = popoverFrame.maxX - maxX
-                popoverFrame.origin.x -= difference
-            }
-            if popoverFrame.maxY > maxY {
-                let difference = popoverFrame.maxY - maxY
-                popoverFrame.origin.y -= difference
-            }
-
-            return popoverFrame
         case let .relative(popoverAnchors):
 
             /// Set the selected anchor to the first one.
@@ -67,14 +47,14 @@ public extension Popover {
                 context.selectedAnchor = popoverAnchors.first
             }
 
-            let popoverFrame = attributes.position.relativeFrame(
+            popoverFrame = attributes.position.relativeFrame(
                 selectedAnchor: context.selectedAnchor ?? popoverAnchors.first ?? .bottom,
                 containerFrame: attributes.sourceFrame().inset(by: attributes.sourceFrameInset()),
                 popoverSize: size ?? .zero
             )
-
-            return popoverFrame
         }
+
+        return clamp(popoverFrame, to: safeWindowFrame, screenEdgePadding: screenEdgePadding)
     }
 
     /// Calculate if the popover should be dismissed via drag **or** animated to another position (if using `.relative` positioning with multiple anchors). Called when the user stops dragging the popover.
@@ -130,5 +110,74 @@ public extension Popover {
             context.frame = popoverFrame
         }
     }
+}
+
+@MainActor
+private func clamp(
+    _ popoverFrame: CGRect,
+    to availableFrame: CGRect,
+    screenEdgePadding: UIEdgeInsets
+) -> CGRect {
+    var popoverFrame = popoverFrame
+    let minX = availableFrame.minX + screenEdgePadding.left
+    let minY = availableFrame.minY + screenEdgePadding.top
+    let maxX = availableFrame.maxX - screenEdgePadding.right
+    let maxY = availableFrame.maxY - screenEdgePadding.bottom
+
+    if popoverFrame.origin.x < minX {
+        popoverFrame.origin.x = minX
+    }
+    if popoverFrame.origin.y < minY {
+        popoverFrame.origin.y = minY
+    }
+    if popoverFrame.maxX > maxX {
+        popoverFrame.origin.x -= (popoverFrame.maxX - maxX)
+    }
+    if popoverFrame.maxY > maxY {
+        popoverFrame.origin.y -= (popoverFrame.maxY - maxY)
+    }
+
+    if popoverFrame.origin.x < minX {
+        popoverFrame.origin.x = minX
+    }
+    if popoverFrame.origin.y < minY {
+        popoverFrame.origin.y = minY
+    }
+
+    return popoverFrame
+}
+
+@MainActor
+private func availableWindowFrame(
+    in window: UIWindow,
+    keyboardFrame: CGRect,
+    screenEdgePadding: UIEdgeInsets
+) -> CGRect {
+    var safeWindowFrame = window.safeAreaLayoutGuide.layoutFrame
+    let overlappingKeyboardFrame = safeWindowFrame.intersection(keyboardFrame)
+    let keyboardTouchesBottomEdge =
+        !keyboardFrame.isEmpty &&
+        keyboardFrame.maxY >= safeWindowFrame.maxY &&
+        keyboardFrame.minY < safeWindowFrame.maxY
+
+    if
+        keyboardTouchesBottomEdge,
+        !overlappingKeyboardFrame.isNull,
+        !overlappingKeyboardFrame.isEmpty
+    {
+        safeWindowFrame.size.height = max(
+            0,
+            overlappingKeyboardFrame.minY - safeWindowFrame.minY
+        )
+    }
+
+    if safeWindowFrame.width < screenEdgePadding.left + screenEdgePadding.right {
+        safeWindowFrame.size.width = screenEdgePadding.left + screenEdgePadding.right
+    }
+    if safeWindowFrame.height < screenEdgePadding.top + screenEdgePadding.bottom {
+        safeWindowFrame.size.height = screenEdgePadding.top + screenEdgePadding.bottom
+    }
+
+    return safeWindowFrame
 }
 #endif

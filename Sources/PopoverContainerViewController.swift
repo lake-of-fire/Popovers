@@ -52,6 +52,7 @@ public class PopoverContainerViewController: HostingParentController {
         
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillShow), name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide), name: UIResponder.keyboardWillHideNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         
 //    override public func loadView() {
         popoverGestureContainerView = PopoverGestureContainer(windowAvailable: { [unowned self] window in
@@ -76,13 +77,24 @@ public class PopoverContainerViewController: HostingParentController {
             view.addSubview(popoverGestureContainerView)
         }
     }
+
+    private func logLookupKeyboardController(
+        _ stage: String,
+        popoverID: String? = nil,
+        result: String
+    ) {
+        debugPrint(
+            "# LOOKUPKEYBOARD",
+            [
+                "stage": stage,
+                "popoverID": popoverID as Any,
+                "result": result
+            ] as [String: Any]
+        )
+    }
     
     override public func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        
-        /// Use the presenting view controller's view as the next element in the gesture container's responder chain
-        /// when a hit test indicates no popover was tapped.
-        popoverGestureContainerView?.presentingViewGestureTarget = presentingViewController?.view
     }
     
     override public func didMove(toParent parent: UIViewController?) {
@@ -91,12 +103,24 @@ public class PopoverContainerViewController: HostingParentController {
     
     @objc private func keyboardWillShow(notification: Notification) {
         Task { @MainActor [weak self] in
+            self?.logKeyboardNotification("keyboard.willShow", notification: notification)
+            self?.updateKeyboardFrame(from: notification)
             self?.popoverModel.updateFramesAfterBoundsChange()
         }
     }
     
     @objc private func keyboardWillHide(notification: Notification) {
         Task { @MainActor [weak self] in
+            self?.logKeyboardNotification("keyboard.willHide", notification: notification)
+            self?.clearKeyboardFrame()
+            self?.popoverModel.updateFramesAfterBoundsChange()
+        }
+    }
+
+    @objc private func keyboardWillChangeFrame(notification: Notification) {
+        Task { @MainActor [weak self] in
+            self?.logKeyboardNotification("keyboard.willChangeFrame", notification: notification)
+            self?.updateKeyboardFrame(from: notification)
             self?.popoverModel.updateFramesAfterBoundsChange()
         }
     }
@@ -115,11 +139,52 @@ public class PopoverContainerViewController: HostingParentController {
         popoverModel.popover = popover
     }
 
+    @MainActor
+    private func updateKeyboardFrame(from notification: Notification) {
+        guard
+            let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+            let popover = popoverModel.popover,
+            let window = view.window
+        else { return }
+
+        let keyboardFrameInWindow = window.convert(keyboardFrame, from: nil)
+        popover.context.keyboardFrameInWindow = keyboardFrameInWindow
+        logLookupKeyboardController(
+            "keyboard.frameUpdated",
+            popoverID: popover.id.uuidString,
+            result: "keyboardFrame=\(NSCoder.string(for: keyboardFrameInWindow)); popoverFrame=\(NSCoder.string(for: popover.context.frame))"
+        )
+    }
+
+    @MainActor
+    private func clearKeyboardFrame() {
+        if let popover = popoverModel.popover {
+            popover.context.keyboardFrameInWindow = .zero
+            logLookupKeyboardController(
+                "keyboard.frameCleared",
+                popoverID: popover.id.uuidString,
+                result: "popoverFrame=\(NSCoder.string(for: popover.context.frame))"
+            )
+        }
+    }
+
+    @MainActor
+    private func logKeyboardNotification(_ stage: String, notification: Notification) {
+        let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
+        let curve = notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int
+        let endFrameString = endFrame.map(NSCoder.string(for:)) ?? "nil"
+        let durationString = duration.map { String($0) } ?? "nil"
+        let curveString = curve.map { String($0) } ?? "nil"
+        logLookupKeyboardController(
+            stage,
+            popoverID: popoverModel.popover?.id.uuidString,
+            result: "endFrame=\(endFrameString); duration=\(durationString); curve=\(curveString)"
+        )
+    }
+
     private class PopoverGestureContainer: UIView {
         private let windowAvailable: (UIWindow) -> Void
-        
-        /// The `UIView` to forward hit tests to when a check fails in this view.
-        weak var presentingViewGestureTarget: UIView?
         
         init(windowAvailable: @escaping (UIWindow) -> Void) {
             self.windowAvailable = windowAvailable
@@ -150,49 +215,33 @@ public class PopoverContainerViewController: HostingParentController {
             /// Only loop through the popovers that are in this window.
 //            let popovers = popoverModel.popovers
             
-            /// The current popover's frame.
-            /// Recalculate it on demand so hit-testing stays aligned when the keyboard
-            /// changes safe-area-driven positioning before the cached context frame settles.
+            /// Use the cached frame during hit-testing to avoid re-entering popover
+            /// frame calculation from within UIKit's hit-test path.
 //            let popoverFrames = popovers.map { $0.context.frame }
-            let popoverFrame = popoverModel.popover.map { popover in
-                popover.calculateFrame(from: popover.context.size)
-            }
             let cachedPopoverFrame = popoverModel.popover?.context.frame
+            let popoverFrame = cachedPopoverFrame
 
             func logLookupKeyboard(
                 _ stage: String,
                 popover: Popover?,
-                excludedFrames: [CGRect] = [],
-                allowedFrames: [CGRect] = [],
                 result: String
             ) {
+                let payload: [String: Any] = [
+                    "stage": stage,
+                    "point": NSCoder.string(for: CGRect(origin: point, size: .zero)),
+                    "popoverID": popover?.id.uuidString as Any,
+                    "frame": popoverFrame.map(NSCoder.string(for:)) as Any,
+                    "result": result
+                ]
                 debugPrint(
                     "# LOOKUPKEYBOARD",
-                    [
-                        "stage": stage,
-                        "point": NSCoder.string(for: CGRect(origin: point, size: .zero)),
-                        "eventType": event?.type.rawValue as Any,
-                        "popoverID": popover?.id.uuidString as Any,
-                        "cachedFrame": cachedPopoverFrame.map(NSCoder.string(for:)) as Any,
-                        "calculatedFrame": popoverFrame.map(NSCoder.string(for:)) as Any,
-                        "excludedFrames": excludedFrames.map(NSCoder.string(for:)),
-                        "allowedFrames": allowedFrames.map(NSCoder.string(for:)),
-                        "safeAreaInsets": NSCoder.string(for: superview?.safeAreaInsets ?? safeAreaInsets),
-                        "keyboardInsetBottom": superview?.safeAreaInsets.bottom ?? safeAreaInsets.bottom,
-                        "result": result
-                    ] as [String: Any]
+                    payload
                 )
             }
 
-            func hitTestHostedSiblings() -> UIView? {
-                guard let superview else { return nil }
-                for sibling in superview.subviews.reversed() where sibling !== self {
-                    let siblingPoint = sibling.convert(point, from: self)
-                    if let hit = sibling.hitTest(siblingPoint, with: event) {
-                        return hit
-                    }
-                }
-                return nil
+            func describeViewType(_ view: UIView?) -> String {
+                guard let view else { return "nil" }
+                return String(describing: type(of: view))
             }
 
             /// Dismiss a popover, knowing that its frame does not contain the touch.
@@ -203,11 +252,6 @@ public class PopoverContainerViewController: HostingParentController {
 //                        !popoverFrames.contains(where: { $0.contains(point) }) /// ... no other popover frame contains the point (the touch landed outside)
                         !(popoverFrame?.contains(point) ?? false) /// ... no other popover frame contains the point (the touch landed outside)
                 {
-                    logLookupKeyboard(
-                        "dismissPopoverIfNecessary",
-                        popover: popoverToDismiss,
-                        result: "dismiss"
-                    )
                     popoverToDismiss.dismiss()
                 }
             }
@@ -218,6 +262,11 @@ public class PopoverContainerViewController: HostingParentController {
             //            for popover in popovers.reversed() {
                 /// Check it the popover was hit.
                 if popoverFrame?.contains(point) ?? false {
+                    logLookupKeyboard(
+                        "branch.hitPopover.enter",
+                        popover: popover,
+                        result: "popoverFrameContains=true"
+                    )
                     /// Dismiss other popovers if they have `tapOutsideIncludesOtherPopovers` set to true.
 //                    for popoverToDismiss in popovers {
 //                        if
@@ -230,29 +279,19 @@ public class PopoverContainerViewController: HostingParentController {
                     
                     /// Receive the touch and block it from going through.
                     let hit = super.hitTest(point, with: event)
-                    let hitIsGestureContainer = (hit === self) || String(describing: type(of: hit)).contains("PopoverGestureContainer")
-                    if hitIsGestureContainer, let siblingHit = hitTestHostedSiblings() {
-                        logLookupKeyboard(
-                            "hitPopover.forwardSibling",
-                            popover: popover,
-                            result: "returnSibling:\(String(describing: siblingHit))"
-                        )
-                        return siblingHit
-                    }
-                    if hitIsGestureContainer {
-                        logLookupKeyboard(
-                            "hitPopover.gestureContainerOnly",
-                            popover: popover,
-                            result: "returnSuper:\(String(describing: hit))"
-                        )
-                    }
                     logLookupKeyboard(
                         "hitPopover",
                         popover: popover,
-                        result: "returnSuper:\(String(describing: hit))"
+                        result: "returnSuperType=\(describeViewType(hit))"
                     )
                     return hit
                 }
+
+                logLookupKeyboard(
+                    "branch.hitPopover.skip",
+                    popover: popover,
+                    result: "popoverFrameContains=false"
+                )
                 
                 /// If the popover has `blocksBackgroundTouches` set to true, stop underlying views from receiving the touch.
                 if popover.attributes.blocksBackgroundTouches {
@@ -261,13 +300,11 @@ public class PopoverContainerViewController: HostingParentController {
                     if allowedFrames.contains(where: { $0.contains(point) }) {
                         dismissPopoverIfNecessary(popoverToDismiss: popover)
                         
-//                        return nil
-                        let hit = presentingViewGestureTarget?.hitTest(point, with: event)
+                        let hit: UIView? = nil
                         logLookupKeyboard(
                             "blocksBackgroundTouches.allowed",
                             popover: popover,
-                            allowedFrames: allowedFrames,
-                            result: "returnPresenting:\(String(describing: hit))"
+                            result: "returnPresentingType=\(describeViewType(hit))"
                         )
                         return hit
                     } else {
@@ -276,8 +313,7 @@ public class PopoverContainerViewController: HostingParentController {
                         logLookupKeyboard(
                             "blocksBackgroundTouches.block",
                             popover: popover,
-                            allowedFrames: allowedFrames,
-                            result: "returnSuper:\(String(describing: hit))"
+                            result: "returnSuperType=\(describeViewType(hit))"
                         )
                         return hit
                     }
@@ -297,15 +333,13 @@ public class PopoverContainerViewController: HostingParentController {
                             logLookupKeyboard(
                                 "excluded.hitPopover",
                                 popover: popover,
-                                excludedFrames: excludedFrames,
-                                result: "returnSuper:\(String(describing: hit))"
+                                result: "returnSuperType=\(describeViewType(hit))"
                             )
                             return hit
                         } else {
                             logLookupKeyboard(
                                 "excluded.passThrough",
                                 popover: popover,
-                                excludedFrames: excludedFrames,
                                 result: "returnNil"
                             )
                             return nil
@@ -325,11 +359,11 @@ public class PopoverContainerViewController: HostingParentController {
             
             /// The touch did not hit any popover, so pass it through to the hit testing target.
 //            return nil
-            let hit = presentingViewGestureTarget?.hitTest(point, with: event)
+            let hit: UIView? = nil
             logLookupKeyboard(
                 "noPopover.passThrough",
                 popover: nil,
-                result: "returnPresenting:\(String(describing: hit))"
+                result: "returnPresentingType=\(describeViewType(hit))"
             )
             return hit
         }
