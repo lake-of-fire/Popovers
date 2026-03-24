@@ -734,6 +734,22 @@ public class PopoverContainerViewController: HostingParentController {
     }
 
     @MainActor
+    public func updateColorScheme(_ colorScheme: ColorScheme) {
+        let interfaceStyle: UIUserInterfaceStyle
+        switch colorScheme {
+        case .light:
+            interfaceStyle = .light
+        case .dark:
+            interfaceStyle = .dark
+        @unknown default:
+            interfaceStyle = .unspecified
+        }
+        overrideUserInterfaceStyle = interfaceStyle
+        children.forEach { $0.overrideUserInterfaceStyle = interfaceStyle }
+        popoverModel.reload()
+    }
+
+    @MainActor
     public func setAllowsPassthroughTouches(_ allowsPassthroughTouches: Bool) {
         guard let popover = popoverModel.popover else { return }
         guard popover.context.allowsPassthroughTouches != allowsPassthroughTouches else { return }
