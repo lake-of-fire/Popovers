@@ -8,6 +8,29 @@
 
 import SwiftUI
 
+private func lookupKeyboardResponderDescription(_ responder: UIResponder?) -> String {
+    guard let responder else { return "nil" }
+    if let view = responder as? UIView {
+        return "\(type(of: view))"
+    }
+    if let viewController = responder as? UIViewController {
+        return "\(type(of: viewController))"
+    }
+    return String(describing: type(of: responder))
+}
+
+private extension UIView {
+    func lookupKeyboardFindFirstResponder() -> UIResponder? {
+        if isFirstResponder { return self }
+        for subview in subviews {
+            if let responder = subview.lookupKeyboardFindFirstResponder() {
+                return responder
+            }
+        }
+        return nil
+    }
+}
+
 /**
  The View Controller that hosts `PopoverContainerView`. This is automatically managed.
  */
@@ -15,6 +38,7 @@ import SwiftUI
 public class PopoverContainerViewController: HostingParentController {
     /// The `UIView` used to handle gesture interactions for popovers.
     private var popoverGestureContainerView: PopoverGestureContainer?
+    private var pendingKeyboardFrameTask: Task<Void, Never>?
     
     /// If this is nil, the view hasn't been laid out yet.
     var previousBounds: CGRect?
@@ -30,6 +54,10 @@ public class PopoverContainerViewController: HostingParentController {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        pendingKeyboardFrameTask?.cancel()
     }
     
     override public func viewDidLayoutSubviews() {
@@ -78,17 +106,25 @@ public class PopoverContainerViewController: HostingParentController {
         }
     }
 
+    override public func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        pendingKeyboardFrameTask?.cancel()
+        pendingKeyboardFrameTask = nil
+    }
+
     private func logLookupKeyboardController(
         _ stage: String,
         popoverID: String? = nil,
         result: String
     ) {
+        let firstResponder = view.window?.lookupKeyboardFindFirstResponder()
         debugPrint(
             "# LOOKUPKEYBOARD",
             [
                 "stage": stage,
                 "popoverID": popoverID as Any,
-                "result": result
+                "result": result,
+                "windowFirstResponder": lookupKeyboardResponderDescription(firstResponder)
             ] as [String: Any]
         )
     }
@@ -104,6 +140,7 @@ public class PopoverContainerViewController: HostingParentController {
     @objc private func keyboardWillShow(notification: Notification) {
         Task { @MainActor [weak self] in
             self?.logKeyboardNotification("keyboard.willShow", notification: notification)
+            self?.pendingKeyboardFrameTask?.cancel()
             self?.updateKeyboardFrame(from: notification)
             self?.popoverModel.updateFramesAfterBoundsChange()
         }
@@ -112,16 +149,19 @@ public class PopoverContainerViewController: HostingParentController {
     @objc private func keyboardWillHide(notification: Notification) {
         Task { @MainActor [weak self] in
             self?.logKeyboardNotification("keyboard.willHide", notification: notification)
-            self?.clearKeyboardFrame()
-            self?.popoverModel.updateFramesAfterBoundsChange()
+            self?.scheduleKeyboardFrameClear(from: notification)
         }
     }
 
     @objc private func keyboardWillChangeFrame(notification: Notification) {
         Task { @MainActor [weak self] in
             self?.logKeyboardNotification("keyboard.willChangeFrame", notification: notification)
-            self?.updateKeyboardFrame(from: notification)
-            self?.popoverModel.updateFramesAfterBoundsChange()
+            guard let self else { return }
+            if self.notificationMovesKeyboardOffscreen(notification) {
+                return
+            }
+            self.updateKeyboardFrame(from: notification)
+            self.popoverModel.updateFramesAfterBoundsChange()
         }
     }
 
@@ -137,6 +177,22 @@ public class PopoverContainerViewController: HostingParentController {
         update(&attributes)
         popover.attributes = attributes
         popoverModel.popover = popover
+    }
+
+    @MainActor
+    public func updateColorScheme(_ colorScheme: ColorScheme) {
+        let interfaceStyle: UIUserInterfaceStyle
+        switch colorScheme {
+        case .light:
+            interfaceStyle = .light
+        case .dark:
+            interfaceStyle = .dark
+        @unknown default:
+            interfaceStyle = .unspecified
+        }
+        overrideUserInterfaceStyle = interfaceStyle
+        children.forEach { $0.overrideUserInterfaceStyle = interfaceStyle }
+        popoverModel.reload()
     }
 
     @MainActor
@@ -169,6 +225,77 @@ public class PopoverContainerViewController: HostingParentController {
     }
 
     @MainActor
+    private func hasActiveTextInputFirstResponder() -> Bool {
+        guard let firstResponder = view.window?.lookupKeyboardFindFirstResponder() else { return false }
+        return firstResponder is UITextField || firstResponder is UITextView
+    }
+
+    @MainActor
+    private func scheduleKeyboardFrameClear(from notification: Notification) {
+        pendingKeyboardFrameTask?.cancel()
+
+        if hasActiveTextInputFirstResponder() {
+            logLookupKeyboardController(
+                "keyboard.frameClearSuppressed",
+                popoverID: popoverModel.popover?.id.uuidString,
+                result: "reason=activeTextInput"
+            )
+            pendingKeyboardFrameTask = nil
+            return
+        }
+
+        let delayNanoseconds: UInt64
+        if keyboardAnimationDuration(from: notification) == 0, notificationMovesKeyboardOffscreen(notification) {
+            delayNanoseconds = 150_000_000
+        } else {
+            delayNanoseconds = 0
+        }
+
+        if delayNanoseconds == 0 {
+            clearKeyboardFrame()
+            popoverModel.updateFramesAfterBoundsChange()
+            pendingKeyboardFrameTask = nil
+            return
+        }
+
+        pendingKeyboardFrameTask = Task { @MainActor [weak self] in
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+
+            guard let self, !Task.isCancelled else { return }
+            if self.hasActiveTextInputFirstResponder() {
+                self.logLookupKeyboardController(
+                    "keyboard.frameClearSuppressed",
+                    popoverID: self.popoverModel.popover?.id.uuidString,
+                    result: "reason=activeTextInputAfterDelay"
+                )
+                self.pendingKeyboardFrameTask = nil
+                return
+            }
+            self.clearKeyboardFrame()
+            self.popoverModel.updateFramesAfterBoundsChange()
+            self.pendingKeyboardFrameTask = nil
+        }
+    }
+
+    @MainActor
+    private func keyboardAnimationDuration(from notification: Notification) -> Double {
+        notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0
+    }
+
+    @MainActor
+    private func notificationMovesKeyboardOffscreen(_ notification: Notification) -> Bool {
+        guard
+            let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+            let window = view.window
+        else { return false }
+
+        let keyboardFrameInWindow = window.convert(keyboardFrame, from: nil)
+        return keyboardFrameInWindow.minY >= window.bounds.maxY
+    }
+
+    @MainActor
     private func logKeyboardNotification(_ stage: String, notification: Notification) {
         let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
         let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
@@ -185,6 +312,8 @@ public class PopoverContainerViewController: HostingParentController {
 
     private class PopoverGestureContainer: UIView {
         private let windowAvailable: (UIWindow) -> Void
+        private var activeTouchCount = 0
+        private var isPerformingDirectContentHitTest = false
         
         init(windowAvailable: @escaping (UIWindow) -> Void) {
             self.windowAvailable = windowAvailable
@@ -203,12 +332,46 @@ public class PopoverContainerViewController: HostingParentController {
                 windowAvailable(window)
             }
         }
+
+        private func logLookupTouch(_ stage: String) {
+            let firstResponder = window?.lookupKeyboardFindFirstResponder()
+            debugPrint(
+                "# LOOKUPKEYBOARD",
+                [
+                    "stage": stage,
+                    "activeTouchCount": activeTouchCount,
+                    "windowFirstResponder": lookupKeyboardResponderDescription(firstResponder)
+                ] as [String: Any]
+            )
+        }
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            activeTouchCount += touches.count
+            logLookupTouch("touchesBegan")
+            super.touchesBegan(touches, with: event)
+        }
+
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+            activeTouchCount = max(0, activeTouchCount - touches.count)
+            logLookupTouch("touchesEnded")
+            super.touchesEnded(touches, with: event)
+        }
+
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+            activeTouchCount = max(0, activeTouchCount - touches.count)
+            logLookupTouch("touchesCancelled")
+            super.touchesCancelled(touches, with: event)
+        }
         
         /**
          Determine if touches should land on popovers or pass through to the underlying view.
          The popover container view takes up the entire screen, so normally it would block all touches from going through. This method fixes that.
          */
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            if isPerformingDirectContentHitTest {
+                return nil
+            }
+
             /// Make sure the hit event was actually a touch and not a cursor hover or something else.
             guard event.map({ $0.type == .touches }) ?? true else { return nil }
             
@@ -244,6 +407,125 @@ public class PopoverContainerViewController: HostingParentController {
                 return String(describing: type(of: view))
             }
 
+            func describeViewIdentity(_ view: UIView?) -> String {
+                guard let view else { return "nil" }
+                return "\(describeViewType(view))@\(ObjectIdentifier(view))"
+            }
+
+            func isHostingView(_ view: UIView) -> Bool {
+                String(describing: type(of: view)).contains("_UIHostingView")
+            }
+
+            func ancestorChain(for view: UIView?) -> String {
+                guard let view else { return "nil" }
+                var chain: [String] = [describeViewIdentity(view)]
+                var currentSuperview = view.superview
+                var depth = 0
+                while depth < 8, let current = currentSuperview {
+                    chain.append(describeViewIdentity(current))
+                    depth += 1
+                    currentSuperview = current.superview
+                }
+                return chain.joined(separator: " <- ")
+            }
+
+            func gestureRecognizerSnapshot(for view: UIView?, maxAncestorDepth: Int = 6) -> String {
+                guard let view else { return "nil" }
+                var entries: [String] = []
+                var current: UIView? = view
+                var depth = 0
+
+                while let unwrappedCurrent = current, depth <= maxAncestorDepth {
+                    let recognizers = (unwrappedCurrent.gestureRecognizers ?? []).map { recognizer in
+                        let recognizerType = String(describing: type(of: recognizer))
+                        return "\(recognizerType)(state=\(recognizer.state.rawValue); cancels=\(recognizer.cancelsTouchesInView); delaysBegan=\(recognizer.delaysTouchesBegan); delaysEnded=\(recognizer.delaysTouchesEnded))"
+                    }
+                    let recognizerSummary = recognizers.isEmpty ? "none" : recognizers.joined(separator: ", ")
+                    entries.append("\(String(repeating: "^", count: depth))\(describeViewIdentity(unwrappedCurrent)) => \(recognizerSummary)")
+                    current = unwrappedCurrent.superview
+                    depth += 1
+                }
+
+                return entries.joined(separator: " | ")
+            }
+
+            func descendantSnapshot(for view: UIView?, maxDepth: Int = 3, maxEntries: Int = 16) -> String {
+                guard let view else { return "nil" }
+                var entries: [String] = []
+
+                func walk(_ current: UIView, depth: Int) {
+                    guard entries.count < maxEntries, depth <= maxDepth else { return }
+                    entries.append(String(repeating: ">", count: depth) + describeViewIdentity(current))
+                    for subview in current.subviews {
+                        guard entries.count < maxEntries else { return }
+                        walk(subview, depth: depth + 1)
+                    }
+                }
+
+                for subview in view.subviews {
+                    guard entries.count < maxEntries else { break }
+                    walk(subview, depth: 1)
+                }
+
+                return entries.isEmpty ? "none" : entries.joined(separator: " | ")
+            }
+
+            func findDescendantTextField(in view: UIView?) -> UITextField? {
+                guard let view else { return nil }
+                if let textField = view as? UITextField {
+                    return textField
+                }
+                for subview in view.subviews {
+                    if let textField = findDescendantTextField(in: subview) {
+                        return textField
+                    }
+                }
+                return nil
+            }
+
+            func nearestAncestorHostedTextField(for view: UIView?) -> UITextField? {
+                var current = view
+                var depth = 0
+
+                while let unwrappedCurrent = current, depth < 8 {
+                    if let textField = findDescendantTextField(in: unwrappedCurrent) {
+                        return textField
+                    }
+                    current = unwrappedCurrent.superview
+                    depth += 1
+                }
+
+                return nil
+            }
+
+            func nearestAncestorContainerHostingTextField(for view: UIView?) -> UIView? {
+                var current = view
+                var depth = 0
+
+                while let unwrappedCurrent = current, depth < 8 {
+                    if findDescendantTextField(in: unwrappedCurrent) != nil {
+                        return unwrappedCurrent
+                    }
+                    current = unwrappedCurrent.superview
+                    depth += 1
+                }
+
+                return nil
+            }
+
+            func directPopoverContentHitTest() -> UIView? {
+                guard let containerSuperview = superview else { return nil }
+                isUserInteractionEnabled = false
+                defer { isUserInteractionEnabled = true }
+
+                let superviewPoint = containerSuperview.convert(point, from: self)
+                let hit = containerSuperview.hitTest(superviewPoint, with: event)
+                if hit === self || hit is PopoverGestureContainer {
+                    return nil
+                }
+                return hit
+            }
+
             /// Dismiss a popover, knowing that its frame does not contain the touch.
             func dismissPopoverIfNecessary(popoverToDismiss: Popover) {
                 if
@@ -262,11 +544,6 @@ public class PopoverContainerViewController: HostingParentController {
             //            for popover in popovers.reversed() {
                 /// Check it the popover was hit.
                 if popoverFrame?.contains(point) ?? false {
-                    logLookupKeyboard(
-                        "branch.hitPopover.enter",
-                        popover: popover,
-                        result: "popoverFrameContains=true"
-                    )
                     /// Dismiss other popovers if they have `tapOutsideIncludesOtherPopovers` set to true.
 //                    for popoverToDismiss in popovers {
 //                        if
@@ -278,11 +555,31 @@ public class PopoverContainerViewController: HostingParentController {
 //                    }
                     
                     /// Receive the touch and block it from going through.
-                    let hit = super.hitTest(point, with: event)
+                    let overlayHit = super.hitTest(point, with: event)
+                    let directContentHit = directPopoverContentHitTest()
+                    let hostedTextFieldHit = nearestAncestorHostedTextField(for: directContentHit)
+                    let hostedContainerHit = nearestAncestorContainerHostingTextField(for: directContentHit)
+                    let hit: UIView?
+                    if overlayHit === self || overlayHit is PopoverGestureContainer {
+                        hit = hostedContainerHit ?? directContentHit ?? overlayHit
+                    } else {
+                        hit = overlayHit
+                    }
+                    let hitDescription = describeViewIdentity(hit)
+                    let overlayHitDescription = describeViewIdentity(overlayHit)
+                    let directHitDescription = describeViewIdentity(directContentHit)
+                    let hostedTextFieldDescription = hostedTextFieldHit.map { "UITextField@\(ObjectIdentifier($0)); isFirstResponder=\($0.isFirstResponder)" } ?? "nil"
+                    let hostedContainerDescription = describeViewIdentity(hostedContainerHit)
+                    let descendantTextFieldDescription: String
+                    if let textField = findDescendantTextField(in: hit) {
+                        descendantTextFieldDescription = "UITextField@\(ObjectIdentifier(textField)); isFirstResponder=\(textField.isFirstResponder)"
+                    } else {
+                        descendantTextFieldDescription = "nil"
+                    }
                     logLookupKeyboard(
                         "hitPopover",
                         popover: popover,
-                        result: "returnSuperType=\(describeViewType(hit))"
+                        result: "overlayHit=\(overlayHitDescription); directContentHit=\(directHitDescription); hostedContainer=\(hostedContainerDescription); hostedTextField=\(hostedTextFieldDescription); returnHit=\(hitDescription); descendantTextField=\(descendantTextFieldDescription); directAncestors=\(ancestorChain(for: directContentHit)); directDescendants=\(descendantSnapshot(for: directContentHit)); returnGestures=\(gestureRecognizerSnapshot(for: hit)); directGestures=\(gestureRecognizerSnapshot(for: directContentHit))"
                     )
                     return hit
                 }

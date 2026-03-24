@@ -4,6 +4,29 @@
 
 import SwiftUI
 
+private func lookupHostingPassthroughResponderDescription(_ responder: UIResponder?) -> String {
+    guard let responder else { return "nil" }
+    if let view = responder as? UIView {
+        return "\(type(of: view))@\(ObjectIdentifier(view))"
+    }
+    if let viewController = responder as? UIViewController {
+        return "\(type(of: viewController))@\(ObjectIdentifier(viewController))"
+    }
+    return String(describing: type(of: responder))
+}
+
+private extension UIView {
+    func lookupHostingPassthroughFindFirstResponder() -> UIResponder? {
+        if isFirstResponder { return self }
+        for subview in subviews {
+            if let responder = subview.lookupHostingPassthroughFindFirstResponder() {
+                return responder
+            }
+        }
+        return nil
+    }
+}
+
 open class HostingParentController: UIViewController {
     public var makeBackgroundsClear = true
     
@@ -34,11 +57,59 @@ open class HostingParentView: UIView {
     public var forwardBaseTouchesTo: UIView?
     public var makeBackgroundsClear = true
     public var ignoreTouchesOnSwiftUIScrollView = false
+
+    private func gestureRecognizerSnapshot(for view: UIView?, maxAncestorDepth: Int = 6) -> String {
+        guard let view else { return "nil" }
+        var entries: [String] = []
+        var current: UIView? = view
+        var depth = 0
+
+        while let unwrappedCurrent = current, depth <= maxAncestorDepth {
+            let recognizers = (unwrappedCurrent.gestureRecognizers ?? []).map { recognizer in
+                let recognizerType = String(describing: type(of: recognizer))
+                return "\(recognizerType)(state=\(recognizer.state.rawValue); cancels=\(recognizer.cancelsTouchesInView); delaysBegan=\(recognizer.delaysTouchesBegan); delaysEnded=\(recognizer.delaysTouchesEnded))"
+            }
+            let recognizerSummary = recognizers.isEmpty ? "none" : recognizers.joined(separator: ", ")
+            entries.append("\(String(repeating: "^", count: depth))\(type(of: unwrappedCurrent))@\(ObjectIdentifier(unwrappedCurrent)) => \(recognizerSummary)")
+            current = unwrappedCurrent.superview
+            depth += 1
+        }
+
+        return entries.joined(separator: " | ")
+    }
+
+    private func logLookupHostingPassthrough(
+        _ stage: String,
+        point: CGPoint,
+        hit: UIView?,
+        extra: String
+    ) {
+        let firstResponder = window?.lookupHostingPassthroughFindFirstResponder()
+        debugPrint(
+            "# LOOKUPKEYBOARD",
+            [
+                "stage": stage,
+                "point": NSCoder.string(for: CGRect(origin: point, size: .zero)),
+                "hit": hit.map { "\(type(of: $0))@\(ObjectIdentifier($0))" } as Any,
+                "windowFirstResponder": lookupHostingPassthroughResponderDescription(firstResponder),
+                "result": extra,
+                "gestures": gestureRecognizerSnapshot(for: hit)
+            ] as [String: Any]
+        )
+    }
     
     override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard let hitTest = super.hitTest(point, with: event) else { return nil }
-        
-        return checkBehind(view: hitTest, point: point, event: event)
+        let resolvedHit = checkBehind(view: hitTest, point: point, event: event)
+        if event?.type == .touches || event == nil {
+            logLookupHostingPassthrough(
+                "hostingPassthrough.hitTest",
+                point: point,
+                hit: resolvedHit,
+                extra: "initialHit=\(type(of: hitTest))@\(ObjectIdentifier(hitTest))"
+            )
+        }
+        return resolvedHit
     }
     
     // what you need to know for this logic >
@@ -81,7 +152,15 @@ open class HostingParentView: UIView {
                         return forwardBaseTouchesTo.hitTest(point, with: event)
                     }
                 } else {
-                    return view
+                    if event?.type == .touches || event == nil {
+                        logLookupHostingPassthrough(
+                            "hostingPassthrough.checkBehind.returnDeeperHit",
+                            point: point,
+                            hit: hitBehind,
+                            extra: "hitBehind=\(type(of: hitBehind))@\(ObjectIdentifier(hitBehind))"
+                        )
+                    }
+                    return hitBehind
                 }
             }
         } else {

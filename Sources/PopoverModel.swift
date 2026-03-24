@@ -10,6 +10,27 @@
 import Combine
 import SwiftUI
 
+func lookupKeyboardRectDeltaDescription(_ oldRect: CGRect, _ newRect: CGRect) -> String {
+    let deltaX = newRect.origin.x - oldRect.origin.x
+    let deltaY = newRect.origin.y - oldRect.origin.y
+    let deltaWidth = newRect.size.width - oldRect.size.width
+    let deltaHeight = newRect.size.height - oldRect.size.height
+    return "dx=\(deltaX); dy=\(deltaY); dw=\(deltaWidth); dh=\(deltaHeight)"
+}
+
+private func lookupKeyboardSizeDeltaDescription(_ oldSize: CGSize?, _ newSize: CGSize?) -> String {
+    switch (oldSize, newSize) {
+    case let (old?, new?):
+        return "dw=\(new.width - old.width); dh=\(new.height - old.height)"
+    case (nil, let new?):
+        return "old=nil; new={\(new.width), \(new.height)}"
+    case let (old?, nil):
+        return "old={\(old.width), \(old.height)}; new=nil"
+    case (nil, nil):
+        return "old=nil; new=nil"
+    }
+}
+
 /**
  The view model for presented popovers within a window.
 
@@ -18,6 +39,7 @@ import SwiftUI
  */
 public class PopoverModel: ObservableObject {
     static let shared = PopoverModel()
+    private var pendingRefreshWorkItem: DispatchWorkItem?
     
     /// The currently-presented popovers. The oldest are in front, the newest at the end.
 //    @Published var popovers = [Popover]()
@@ -117,16 +139,52 @@ public class PopoverModel: ObservableObject {
 //            popover.updateFrame(with: popover.context.size)
 //        }
         if let popover {
+            let oldFrame = popover.context.frame
+            let oldStaticFrame = popover.context.staticFrame
+            let oldSize = popover.context.size
             popover.updateFrame(with: popover.context.size)
+            let didChange = oldFrame != popover.context.frame
+                || oldStaticFrame != popover.context.staticFrame
+                || oldSize != popover.context.size
+            debugPrint(
+                "# LOOKUPKEYBOARD",
+                [
+                    "stage": "popoverModel.updateFramesAfterBoundsChange",
+                    "popoverID": popover.id.uuidString,
+                    "result": "frameOld=\(NSCoder.string(for: oldFrame)); frameNew=\(NSCoder.string(for: popover.context.frame)); frameDelta=\(lookupKeyboardRectDeltaDescription(oldFrame, popover.context.frame)); staticOld=\(NSCoder.string(for: oldStaticFrame)); staticNew=\(NSCoder.string(for: popover.context.staticFrame)); staticDelta=\(lookupKeyboardRectDeltaDescription(oldStaticFrame, popover.context.staticFrame)); sizeDelta=\(lookupKeyboardSizeDeltaDescription(oldSize, popover.context.size)); changed=\(didChange)"
+                ] as [String: Any]
+            )
+            guard didChange else { return }
         }
 
         /// Reload the container view.
         reload()
 
         /// Some other popovers need to wait until the rotation has completed before updating.
-        DispatchQueue.main.asyncAfter(deadline: .now() + Popovers.frameUpdateDelayAfterBoundsChange) {
+        pendingRefreshWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard let popover = self.popover else { return }
+            let oldFrame = popover.context.frame
+            let oldStaticFrame = popover.context.staticFrame
+            let oldSize = popover.context.size
+            popover.updateFrame(with: popover.context.size)
+            let didChange = oldFrame != popover.context.frame
+                || oldStaticFrame != popover.context.staticFrame
+                || oldSize != popover.context.size
+            debugPrint(
+                "# LOOKUPKEYBOARD",
+                [
+                    "stage": "popoverModel.delayedRefresh",
+                    "popoverID": popover.id.uuidString,
+                    "result": "frameOld=\(NSCoder.string(for: oldFrame)); frameNew=\(NSCoder.string(for: popover.context.frame)); frameDelta=\(lookupKeyboardRectDeltaDescription(oldFrame, popover.context.frame)); staticOld=\(NSCoder.string(for: oldStaticFrame)); staticNew=\(NSCoder.string(for: popover.context.staticFrame)); staticDelta=\(lookupKeyboardRectDeltaDescription(oldStaticFrame, popover.context.staticFrame)); sizeDelta=\(lookupKeyboardSizeDeltaDescription(oldSize, popover.context.size)); changed=\(didChange)"
+                ] as [String: Any]
+            )
+            guard didChange else { return }
             self.refresh()
         }
+        pendingRefreshWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Popovers.frameUpdateDelayAfterBoundsChange, execute: workItem)
     }
 
     /// Access this with `UIResponder.frameTagged(_:)` if inside a `WindowReader`, or `Popover.Context.frameTagged(_:)` if inside a `PopoverReader.`

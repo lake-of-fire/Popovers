@@ -10,6 +10,25 @@
 import Combine
 import SwiftUI
 
+private func lookupKeyboardPopoverContextDelta(_ oldRect: CGRect, _ newRect: CGRect) -> String {
+    "dx=\(newRect.origin.x - oldRect.origin.x); dy=\(newRect.origin.y - oldRect.origin.y); dw=\(newRect.size.width - oldRect.size.width); dh=\(newRect.size.height - oldRect.size.height)"
+}
+
+private func logLookupKeyboardPopoverContext(
+    _ stage: String,
+    popoverID: UUID,
+    result: String
+) {
+    debugPrint(
+        "# LOOKUPKEYBOARD",
+        [
+            "stage": stage,
+            "popoverID": popoverID.uuidString,
+            "result": result
+        ] as [String: Any]
+    )
+}
+
 public extension Popover {
     /**
      The popover's view model (stores attributes, frame, and other visible traits).
@@ -26,7 +45,16 @@ public extension Popover {
         @MainActor
         @Published internal var isOffsetInitialized = false
         @MainActor
-        @Published internal var offset: CGSize = .zero
+        @Published internal var offset: CGSize = .zero {
+            didSet {
+                guard oldValue != offset else { return }
+                logLookupKeyboardPopoverContext(
+                    "popoverContext.offsetSet",
+                    popoverID: id,
+                    result: "old={\(oldValue.width), \(oldValue.height)}; new={\(offset.width), \(offset.height)}"
+                )
+            }
+        }
 
         /// The popover's dynamic size, calculated from SwiftUI. If this is `nil`, the popover is not yet ready to be displayed.
         @MainActor
@@ -34,15 +62,42 @@ public extension Popover {
         
         /// The frame of the popover, without drag gesture offset applied.
         @MainActor
-        @Published public var staticFrame = CGRect.zero
+        @Published public var staticFrame = CGRect.zero {
+            didSet {
+                guard oldValue != staticFrame else { return }
+                logLookupKeyboardPopoverContext(
+                    "popoverContext.staticFrameSet",
+                    popoverID: id,
+                    result: "old=\(NSCoder.string(for: oldValue)); new=\(NSCoder.string(for: staticFrame)); delta=\(lookupKeyboardPopoverContextDelta(oldValue, staticFrame))"
+                )
+            }
+        }
         
         /// The current frame of the popover.
         @MainActor
-        @Published public var frame = CGRect.zero
+        @Published public var frame = CGRect.zero {
+            didSet {
+                guard oldValue != frame else { return }
+                logLookupKeyboardPopoverContext(
+                    "popoverContext.frameSet",
+                    popoverID: id,
+                    result: "old=\(NSCoder.string(for: oldValue)); new=\(NSCoder.string(for: frame)); delta=\(lookupKeyboardPopoverContextDelta(oldValue, frame))"
+                )
+            }
+        }
 
         /// The visible keyboard frame converted into window coordinates.
         @MainActor
-        @Published internal var keyboardFrameInWindow = CGRect.zero
+        @Published internal var keyboardFrameInWindow = CGRect.zero {
+            didSet {
+                guard oldValue != keyboardFrameInWindow else { return }
+                logLookupKeyboardPopoverContext(
+                    "popoverContext.keyboardFrameSet",
+                    popoverID: id,
+                    result: "old=\(NSCoder.string(for: oldValue)); new=\(NSCoder.string(for: keyboardFrameInWindow)); delta=\(lookupKeyboardPopoverContextDelta(oldValue, keyboardFrameInWindow))"
+                )
+            }
+        }
 //        let ee = UUID().uuidString.prefix(6)
         
         /// The currently selected anchor, if the popover has a `.relative` position.

@@ -9,15 +9,55 @@
 #if os(iOS)
 import SwiftUI
 
+private func lookupKeyboardRectDeltaDescriptionInCalculations(_ oldRect: CGRect, _ newRect: CGRect) -> String {
+    "dx=\(newRect.origin.x - oldRect.origin.x); dy=\(newRect.origin.y - oldRect.origin.y); dw=\(newRect.size.width - oldRect.size.width); dh=\(newRect.size.height - oldRect.size.height)"
+}
+
+private func lookupKeyboardAnchorDescription(_ anchor: Popover.Attributes.Position.Anchor?) -> String {
+    guard let anchor else { return "nil" }
+    switch anchor {
+    case .topLeft: return "topLeft"
+    case .top: return "top"
+    case .topRight: return "topRight"
+    case .right: return "right"
+    case .bottomRight: return "bottomRight"
+    case .bottom: return "bottom"
+    case .bottomLeft: return "bottomLeft"
+    case .left: return "left"
+    case .center: return "center"
+    }
+}
+
 public extension Popover {
     /// Updates the popover's frame using its size.
     @MainActor
     func updateFrame(with size: CGSize?) {
+        let oldFrame = context.frame
+        let oldStaticFrame = context.staticFrame
+        let oldOffset = context.offset
         let frame = calculateFrame(from: size)
-        context.size = size
-        context.staticFrame = frame
-        context.frame = frame
-        context.offset = CGSize(width: frame.origin.x, height: frame.origin.y)
+        let newOffset = CGSize(width: frame.origin.x, height: frame.origin.y)
+
+        if context.size != size {
+            context.size = size
+        }
+        if context.staticFrame != frame {
+            context.staticFrame = frame
+        }
+        if context.frame != frame {
+            context.frame = frame
+        }
+        if context.offset != newOffset {
+            context.offset = newOffset
+        }
+        debugPrint(
+            "# LOOKUPKEYBOARD",
+            [
+                "stage": "popover.updateFrame",
+                "popoverID": id.uuidString,
+                "result": "frameOld=\(NSCoder.string(for: oldFrame)); frameNew=\(NSCoder.string(for: context.frame)); frameDelta=\(lookupKeyboardRectDeltaDescriptionInCalculations(oldFrame, context.frame)); staticOld=\(NSCoder.string(for: oldStaticFrame)); staticNew=\(NSCoder.string(for: context.staticFrame)); staticDelta=\(lookupKeyboardRectDeltaDescriptionInCalculations(oldStaticFrame, context.staticFrame)); offsetOld={\(oldOffset.width), \(oldOffset.height)}; offsetNew={\(context.offset.width), \(context.offset.height)}; changed=\(oldFrame != context.frame || oldStaticFrame != context.staticFrame || oldOffset != context.offset)"
+            ] as [String: Any]
+        )
     }
 
     /// Calculate the popover's frame based on its size and position.
@@ -30,15 +70,19 @@ public extension Popover {
             keyboardFrame: context.keyboardFrameInWindow,
             screenEdgePadding: screenEdgePadding
         )
+        let sourceFrame = attributes.sourceFrame().inset(by: attributes.sourceFrameInset())
+        let popoverSize = size ?? .zero
         var popoverFrame = CGRect.zero
+        let selectedAnchorDescription: String
 
         switch attributes.position {
         case let .absolute(originAnchor, popoverAnchor):
+            selectedAnchorDescription = "absolute(origin=\(lookupKeyboardAnchorDescription(originAnchor)); popover=\(lookupKeyboardAnchorDescription(popoverAnchor)))"
             popoverFrame = attributes.position.absoluteFrame(
                 originAnchor: originAnchor,
                 popoverAnchor: popoverAnchor,
-                originFrame: attributes.sourceFrame().inset(by: attributes.sourceFrameInset()),
-                popoverSize: size ?? .zero
+                originFrame: sourceFrame,
+                popoverSize: popoverSize
             )
         case let .relative(popoverAnchors):
 
@@ -46,15 +90,30 @@ public extension Popover {
             if context.selectedAnchor == nil {
                 context.selectedAnchor = popoverAnchors.first
             }
+            let selectedAnchor = context.selectedAnchor ?? popoverAnchors.first ?? .bottom
+            let candidateAnchors = popoverAnchors
+                .map(lookupKeyboardAnchorDescription)
+                .joined(separator: ",")
+            selectedAnchorDescription = "relative(selected=\(lookupKeyboardAnchorDescription(selectedAnchor)); candidates=\(candidateAnchors))"
 
             popoverFrame = attributes.position.relativeFrame(
-                selectedAnchor: context.selectedAnchor ?? popoverAnchors.first ?? .bottom,
-                containerFrame: attributes.sourceFrame().inset(by: attributes.sourceFrameInset()),
-                popoverSize: size ?? .zero
+                selectedAnchor: selectedAnchor,
+                containerFrame: sourceFrame,
+                popoverSize: popoverSize
             )
         }
 
-        return clamp(popoverFrame, to: safeWindowFrame, screenEdgePadding: screenEdgePadding)
+        let clampedFrame = clamp(popoverFrame, to: safeWindowFrame, screenEdgePadding: screenEdgePadding)
+        debugPrint(
+            "# LOOKUPKEYBOARD",
+            [
+                "stage": "popover.calculateFrame",
+                "popoverID": id.uuidString,
+                "result": "sourceFrame=\(NSCoder.string(for: sourceFrame)); popoverSize={\(popoverSize.width), \(popoverSize.height)}; selectedAnchor=\(selectedAnchorDescription); availableFrame=\(NSCoder.string(for: safeWindowFrame)); unclampedFrame=\(NSCoder.string(for: popoverFrame)); clampedFrame=\(NSCoder.string(for: clampedFrame)); keyboardFrame=\(NSCoder.string(for: context.keyboardFrameInWindow)); screenEdgePadding={top=\(screenEdgePadding.top), left=\(screenEdgePadding.left), bottom=\(screenEdgePadding.bottom), right=\(screenEdgePadding.right)}"
+            ] as [String: Any]
+        )
+
+        return clampedFrame
     }
 
     /// Calculate if the popover should be dismissed via drag **or** animated to another position (if using `.relative` positioning with multiple anchors). Called when the user stops dragging the popover.
